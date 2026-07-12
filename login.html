@@ -8,16 +8,19 @@
 </head>
 <body>
 
-<div class="auth-wrap">
+<div class="auth-wrap" id="authWrap">
   <div class="auth-card">
     <h2>Willkommen zurück</h2>
-    <p class="sub">Melde dich an, um deine Gruppen zu verwalten.</p>
+    <p class="sub" id="subText">Melde dich an, um deine Gruppen zu verwalten.</p>
 
     <div class="auth-error" id="errorBox"></div>
 
-    <input type="email" id="email" placeholder="E-Mail-Adresse" autocomplete="username">
-    <input type="password" id="password" placeholder="Passwort" autocomplete="current-password">
-    <button class="btn btn-primary" id="loginBtn">Anmelden</button>
+    <div id="passwordFields">
+      <input type="email" id="email" placeholder="E-Mail-Adresse" autocomplete="username">
+      <input type="password" id="password" placeholder="Passwort" autocomplete="current-password">
+      <button class="btn btn-primary" id="loginBtn">Anmelden</button>
+      <p class="auth-link" style="margin-top:10px;"><a href="#" id="forgotLink">Passwort vergessen?</a></p>
+    </div>
 
     <p class="auth-link">Noch kein Konto? <a href="register.html">Jetzt registrieren</a></p>
   </div>
@@ -35,9 +38,59 @@
 const errorBox = document.getElementById("errorBox");
 function showError(msg){ errorBox.textContent = msg; errorBox.classList.add("show"); }
 
-auth.onAuthStateChanged(user => {
-  if(user) window.location.href = "index.html";
-});
+async function ensureUserDoc(user){
+  const ref = db.collection("users").doc(user.uid);
+  const snap = await ref.get();
+  if(!snap.exists){
+    await ref.set({
+      name: user.displayName || (user.email ? user.email.split("@")[0] : "Nutzer"),
+      email: (user.email||"").toLowerCase(),
+      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+  }
+}
+async function processPendingInvites(user){
+  if(!user.email) return;
+  const email = user.email.toLowerCase();
+  const inviteRef = db.collection("invites").doc(email);
+  const snap = await inviteRef.get();
+  if(!snap.exists) return;
+  const groupIds = snap.data().groupIds || [];
+  for(const gid of groupIds){
+    try{
+      await db.collection("groups").doc(gid).update({
+        members: firebase.firestore.FieldValue.arrayUnion(user.uid),
+        [`memberInfo.${user.uid}`]: { email, name: user.displayName || email, addedAt: Date.now() },
+        [`pendingInvites.${email}`]: firebase.firestore.FieldValue.delete()
+      });
+    }catch(e){ console.error(e); }
+  }
+  await inviteRef.delete().catch(()=>{});
+}
+
+// --- Einladungs-/Anmeldelink abschließen ---
+if(auth.isSignInWithEmailLink(window.location.href)){
+  document.getElementById("passwordFields").style.display = "none";
+  document.getElementById("subText").textContent = "Anmeldung wird bestätigt…";
+  let email = window.localStorage.getItem("emailForSignIn");
+  if(!email){ email = window.prompt("Bitte bestätige deine E-Mail-Adresse für die Einladung:"); }
+  if(email){
+    auth.signInWithEmailLink(email, window.location.href)
+      .then(async result => {
+        window.localStorage.removeItem("emailForSignIn");
+        await ensureUserDoc(result.user);
+        await processPendingInvites(result.user);
+        window.location.href = "index.html";
+      })
+      .catch(err => {
+        document.getElementById("passwordFields").style.display = "block";
+        document.getElementById("subText").textContent = "Melde dich an, um deine Gruppen zu verwalten.";
+        showError("Anmeldelink ungültig oder abgelaufen: " + err.message);
+      });
+  }
+} else {
+  auth.onAuthStateChanged(user => { if(user) window.location.href = "index.html"; });
+}
 
 document.getElementById("loginBtn").addEventListener("click", () => {
   const email = document.getElementById("email").value.trim();
@@ -45,7 +98,7 @@ document.getElementById("loginBtn").addEventListener("click", () => {
   if(!email || !pass){ showError("Bitte E-Mail und Passwort eingeben."); return; }
 
   auth.signInWithEmailAndPassword(email, pass)
-    .then(() => { window.location.href = "index.html"; })
+    .then(async res => { await processPendingInvites(res.user); window.location.href = "index.html"; })
     .catch(err => {
       const messages = {
         "auth/invalid-credential": "E-Mail oder Passwort ist falsch.",
@@ -56,6 +109,15 @@ document.getElementById("loginBtn").addEventListener("click", () => {
       };
       showError(messages[err.code] || "Anmeldung fehlgeschlagen: " + err.message);
     });
+});
+
+document.getElementById("forgotLink").addEventListener("click", (e) => {
+  e.preventDefault();
+  const email = document.getElementById("email").value.trim();
+  if(!email){ showError("Bitte zuerst deine E-Mail-Adresse oben eingeben."); return; }
+  auth.sendPasswordResetEmail(email)
+    .then(()=>{ errorBox.classList.remove("show"); alert("Wir haben dir eine E-Mail zum Zurücksetzen deines Passworts gesendet."); })
+    .catch(err => showError("Fehler: " + err.message));
 });
 </script>
 </body>

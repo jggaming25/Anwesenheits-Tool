@@ -52,10 +52,9 @@ document.getElementById("registerBtn").addEventListener("click", () => {
       return cred.user.updateProfile({ displayName: name }).then(() => {
         return db.collection("users").doc(cred.user.uid).set({
           name: name,
-          email: email,
-          erstelltAm: firebase.firestore.FieldValue.serverTimestamp(),
-          data: { groups: [] }
-        });
+          email: email.toLowerCase(),
+          createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        }).then(() => cred.user.sendEmailVerification());
       });
     })
     .then(() => { window.location.href = "index.html"; })
