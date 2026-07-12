@@ -45,6 +45,8 @@ async function ensureUserDoc(user){
     await ref.set({
       name: user.displayName || (user.email ? user.email.split("@")[0] : "Nutzer"),
       email: (user.email||"").toLowerCase(),
+      emailVerified: true, // per Einladungslink ist der E-Mail-Besitz bereits nachgewiesen
+      settings: { autoRefresh: true, darkMode: false },
       createdAt: firebase.firestore.FieldValue.serverTimestamp()
     });
   }

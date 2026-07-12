@@ -1,33 +1,62 @@
-# Anwesenheits Check – Setup (Version 2)
+# Anwesenheits Check – Setup (Version 3)
 
 ## Neu in dieser Version
-- Mitarbeiter per E-Mail einladen (Anmeldelink, automatische Registrierung/Anmeldung)
-- Mitarbeiter können Anwesenheit genauso eintragen wie der Ersteller – nur solange sie in der Gruppe sind
-- Live-Bearbeitungssperre: nur eine Person kann eine Gruppe gleichzeitig bearbeiten
-- Passwort-Reset (durch Mitarbeiter selbst über den Login-Screen oder durch den Ersteller)
-- E-Mail-Bestätigung nach der Registrierung
-- Konto löschen
-- Präzisere Termin-Felder (Uhrzeit von/bis, Ort, Beschreibung) und Personen-Felder (E-Mail, Telefon, Geburtstag, Notiz)
-- Eigenes Bestätigungsfenster statt Browser-Popup beim Abmelden
+- Eigener 6-stelliger Bestätigungscode nach der Registrierung (per E-Mail, schön gestaltet über EmailJS) –
+  ohne Bestätigung kann die App nicht genutzt werden
+- E-Mail-Adresse kann im Konto geändert werden – erfordert erneute Code-Bestätigung an die neue Adresse
+- Dark Mode (umschaltbar & gespeichert in den Konto-Einstellungen)
+- Automatische Aktualisierung alle 60 Sekunden, pausiert automatisch während man in ein Feld tippt,
+  ein-/ausschaltbar über das kleine Uhr-Symbol unten links oder in den Konto-Einstellungen
+- Grüner "Speichern"-Button zusätzlich zur automatischen Speicherung
+- Personen-Felder erweitert: Roblox Name, Discord Name, Eintrittsdatum, Ausgebildet durch, Rolle (HR/FDL/TF)
+- Status pro Termin zurücksetzbar ("nicht eingetragen")
+- Gruppenübersicht: Suche nach Namen + Filter "Alle / Meine / Geteilte"
+- Team-Mitglieder können im Nachhinein bearbeitet werden (Anzeigename)
+- Verlaufsprotokoll ("Logs") pro Gruppe, nur für den Ersteller sichtbar
 
-## 1. Firebase-Projekt (bereits vorhanden)
-Falls noch nicht geschehen: siehe vorherige Anleitung (Projekt erstellen, App registrieren, Config in `firebase-config.js`).
+## 1. EmailJS einrichten (für schön gestaltete Bestätigungscode-E-Mails)
+1. Kostenloses Konto auf https://www.emailjs.com erstellen
+2. **Email Services** → E-Mail-Dienst hinzufügen (z. B. Gmail) → verbinden → Service-ID notieren
+3. **Email Templates** → neues Template erstellen, Inhalt z. B.:
 
-## 2. Authentication – zwei Anmeldemethoden aktivieren
+```html
+<div style="font-family:Arial,sans-serif;max-width:420px;margin:0 auto;padding:32px 24px;background:#F4F6F9;border-radius:16px;">
+  <h2 style="color:#2E7DF7;margin-top:0;">Anwesenheits Check</h2>
+  <p>Hallo {{to_name}},</p>
+  <p>dein Bestätigungscode lautet:</p>
+  <div style="background:#2E7DF7;color:#fff;font-size:28px;font-weight:bold;letter-spacing:8px;
+    text-align:center;padding:16px;border-radius:12px;margin:20px 0;">{{code}}</div>
+  <p style="color:#7B8794;font-size:13px;">Der Code ist 15 Minuten gültig. Falls du diese Anfrage nicht
+  gestellt hast, kannst du diese E-Mail ignorieren.</p>
+</div>
+```
+
+4. Als Template-Variablen `{{to_email}}`, `{{to_name}}`, `{{code}}` verwenden (im "An"-Feld des
+   Templates `{{to_email}}` eintragen). Template-ID notieren.
+5. **Account** → **General** → Public Key kopieren
+6. Alle drei Werte in `emailjs-config.js` eintragen:
+```js
+const EMAILJS_PUBLIC_KEY   = "...";
+const EMAILJS_SERVICE_ID   = "...";
+const EMAILJS_TEMPLATE_VERIFY = "...";
+```
+
+> Hinweis: Mitarbeiter-Einladungen und Passwort-Reset laufen weiterhin über Firebase selbst
+> (Anmeldelink bzw. Reset-Link) und nutzen daher Firebases Standard-E-Mail-Design, da Firebase
+> diese E-Mails clientseitig ohne eigenes Template versendet.
+
+## 2. Firebase-Projekt (bereits vorhanden)
+Siehe vorherige Anleitung. `firebase-config.js` sollte bereits ausgefüllt sein.
+
+## 3. Authentication
 Build → Authentication → Sign-in-Methode:
-1. **E-Mail/Passwort** aktivieren (falls noch nicht geschehen)
-2. Zusätzlich in derselben Zeile **"E-Mail-Link (kennwortlose Anmeldung)"** aktivieren
-   – wird für die Mitarbeiter-Einladung benötigt
+1. **E-Mail/Passwort** aktivieren
+2. **E-Mail-Link (kennwortlose Anmeldung)** aktivieren (für Mitarbeiter-Einladungen)
 
-## 3. Autorisierte Domain hinzufügen
-Authentication → Einstellungen (Settings) → Tab **"Autorisierte Domains"**
-→ **"Domain hinzufügen"** → deine GitHub-Pages-Domain eintragen, z. B.:
-```
-jggaming25.github.io
-```
+Authentication → Einstellungen → Autorisierte Domains → deine GitHub-Pages-Domain hinzufügen.
 
 ## 4. Firestore-Sicherheitsregeln
-Firestore-Database → Regeln, kompletten Text ersetzen durch:
+Kompletten Regel-Text ersetzen durch:
 
 ```
 rules_version = '2';
@@ -48,6 +77,11 @@ service cloud.firestore {
       allow create: if isSignedIn();
       allow update: if isOwner(resource.data) || isMember(resource.data) || isInvited(groupId);
       allow delete: if isOwner(resource.data);
+
+      match /logs/{logId} {
+        allow read: if isSignedIn() && request.auth.uid == get(/databases/$(database)/documents/groups/$(groupId)).data.ownerUid;
+        allow create: if isSignedIn();
+      }
     }
 
     match /users/{userId} {
@@ -58,33 +92,37 @@ service cloud.firestore {
       allow read: if isSignedIn() && request.auth.token.email == email;
       allow write: if isSignedIn();
     }
+
+    match /emailVerifications/{userId} {
+      allow read, write: if isSignedIn() && request.auth.uid == userId;
+    }
+
+    match /emailChangeRequests/{userId} {
+      allow read, write: if isSignedIn() && request.auth.uid == userId;
+    }
   }
 }
 ```
 
-> Hinweis: Die Live-Bearbeitungssperre wird auf App-Ebene durchgesetzt (verhindert
-> versehentliches gleichzeitiges Bearbeiten durch befreundete Nutzer), nicht als
-> harte Sicherheitsgrenze in den Firestore-Regeln.
-
 ## 5. Hochladen
-Alle Dateien in den Root deines GitHub-Pages-Repos hochladen (wie gehabt).
+Alle Dateien (inkl. `emailjs-config.js`) in den Root deines GitHub-Pages-Repos hochladen.
 
 ## 6. Impressum & Datenschutz ausfüllen
-In `impressum.html` und `datenschutz.html` alle `[...]`-Platzhalter ersetzen.
+Alle `[...]`-Platzhalter in `impressum.html` / `datenschutz.html` ersetzen.
 
-## Funktionsweise Mitarbeiter-Einladung
-1. Gruppen-Ersteller öffnet Gruppe → Tab "Team" → "+" → E-Mail eingeben
-2. System sendet eine E-Mail mit Anmeldelink an diese Adresse
-3. Empfänger klickt den Link:
-   - Hat er schon ein Konto mit dieser E-Mail → wird direkt angemeldet
-   - Hat er noch keins → wird automatisch registriert
-4. Danach hat er sofort Zugriff auf die Gruppe und kann Anwesenheiten eintragen
-5. Der Ersteller kann Mitarbeiter jederzeit wieder entfernen oder ihnen einen
-   Passwort-Reset-Link senden (Tab "Team")
+## Wichtiger Hinweis zu E-Mail-Zustellung
+Wenn E-Mails (egal ob Firebase-Standard oder EmailJS) nicht ankommen:
+- Spam-/Werbeordner prüfen
+- Manche deutsche Anbieter (GMX, web.de, T-Online) filtern automatisierte Mails teils aggressiver –
+  zum Testen am besten zuerst mit einer Gmail-Adresse probieren
+- Bei EmailJS: im EmailJS-Dashboard unter "Email History" nachsehen, ob der Versand dort als
+  erfolgreich oder fehlgeschlagen protokolliert wurde – das zeigt sofort, ob es an Firebase/EmailJS
+  oder am E-Mail-Anbieter des Empfängers liegt
 
 ## Dateien
-- `login.html` / `register.html` – Anmeldung, Registrierung, Einladungs-Link-Anmeldung
-- `index.html` + `app.js` – Hauptanwendung (Gruppen, Termine, Personen, Team, Statistik, Konto)
-- `firebase-config.js` – Zugangsdaten zu deinem Firebase-Projekt
-- `style.css` – gemeinsames Design
+- `login.html` / `register.html` – Anmeldung, Registrierung (mit Code-Versand), Einladungs-Link-Anmeldung
+- `index.html` + `app.js` – Hauptanwendung
+- `firebase-config.js` – Firebase-Zugangsdaten
+- `emailjs-config.js` – EmailJS-Zugangsdaten
+- `style.css` – Design inkl. Dark Mode
 - `impressum.html` / `datenschutz.html` – Rechtstexte

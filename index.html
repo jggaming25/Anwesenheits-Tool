@@ -11,9 +11,10 @@
 <div class="topbar">
   <span class="back" id="backBtn" style="visibility:hidden">‹</span>
   <h1 id="pageTitle">Anwesenheits Check</h1>
+  <span class="icon-btn" id="saveBtn" title="Jetzt speichern">💾</span>
   <span class="icon-btn" id="exportBtn" style="visibility:hidden">⬇</span>
   <span class="icon-btn" id="accountBtn" title="Mein Konto">👤</span>
-  <span class="icon-btn" id="logoutBtn" title="Abmelden">⏻</span>
+  <button id="logoutBtn" title="Abmelden">✕</button>
 </div>
 <div class="container" id="app">
   <div class="empty">Lade Daten…</div>
@@ -23,10 +24,20 @@
 </div>
 <button class="fab" id="fabBtn">+</button>
 
+<div class="refresh-widget" id="refreshWidget">
+  <span id="refreshCountdown">60 s</span>
+  <label class="mini-toggle">
+    <input type="checkbox" id="refreshToggle" checked>
+    <span></span>
+  </label>
+</div>
+
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script src="firebase-config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+<script src="emailjs-config.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

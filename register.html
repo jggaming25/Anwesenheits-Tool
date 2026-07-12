@@ -33,9 +33,12 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script src="firebase-config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+<script src="emailjs-config.js"></script>
 <script>
 const errorBox = document.getElementById("errorBox");
 function showError(msg){ errorBox.textContent = msg; errorBox.classList.add("show"); }
+function genCode(){ return String(Math.floor(100000 + Math.random()*900000)); }
 
 document.getElementById("registerBtn").addEventListener("click", () => {
   const name = document.getElementById("displayName").value.trim();
@@ -47,25 +50,32 @@ document.getElementById("registerBtn").addEventListener("click", () => {
   if(pass.length < 6){ showError("Das Passwort muss mindestens 6 Zeichen haben."); return; }
   if(pass !== pass2){ showError("Die Passwörter stimmen nicht überein."); return; }
 
+  const btn = document.getElementById("registerBtn");
+  btn.disabled = true; btn.textContent = "Bitte warten…";
+
   auth.createUserWithEmailAndPassword(email, pass)
     .then(cred => {
       return cred.user.updateProfile({ displayName: name }).then(() => {
         return db.collection("users").doc(cred.user.uid).set({
           name: name,
           email: email.toLowerCase(),
+          emailVerified: false,
+          settings: { autoRefresh: true, darkMode: false },
           createdAt: firebase.firestore.FieldValue.serverTimestamp()
         });
       }).then(() => cred.user);
     })
     .then(user => {
-      // E-Mail-Versand getrennt behandeln: Registrierung soll auch klappen,
-      // wenn der Versand aus irgendeinem Grund fehlschlägt – Fehler wird dann sichtbar angezeigt.
-      user.sendEmailVerification()
-        .then(()=> console.log("Bestätigungs-E-Mail wurde von Firebase angenommen."))
-        .catch(err => alert("Bestätigungs-E-Mail konnte nicht gesendet werden: " + err.message + "\n\nDu kannst sie später erneut über 'Mein Konto' anfordern."));
-      window.location.href = "index.html";
+      const code = genCode();
+      return db.collection("emailVerifications").doc(user.uid).set({ code, email: user.email, createdAt: Date.now() })
+        .then(() => sendVerificationEmail(user.email, name, code))
+        .catch(err => {
+          alert("Bestätigungscode konnte nicht gesendet werden: " + err.message + "\n\nDu kannst ihn später über 'Mein Konto' erneut anfordern.");
+        });
     })
+    .then(() => { window.location.href = "index.html"; })
     .catch(err => {
+      btn.disabled = false; btn.textContent = "Registrieren";
       const messages = {
         "auth/email-already-in-use": "Diese E-Mail wird bereits verwendet.",
         "auth/invalid-email": "Ungültige E-Mail-Adresse.",
