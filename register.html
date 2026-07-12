@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Registrieren – Anwesenheits Check</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="auth-wrap">
+  <div class="auth-card">
+    <h2>Konto erstellen</h2>
+    <p class="sub">Lege ein kostenloses Konto an.</p>
+
+    <div class="auth-error" id="errorBox"></div>
+
+    <input type="text" id="displayName" placeholder="Dein Name" autocomplete="name">
+    <input type="email" id="email" placeholder="E-Mail-Adresse" autocomplete="username">
+    <input type="password" id="password" placeholder="Passwort (mind. 6 Zeichen)" autocomplete="new-password">
+    <input type="password" id="password2" placeholder="Passwort wiederholen" autocomplete="new-password">
+    <button class="btn btn-primary" id="registerBtn">Registrieren</button>
+
+    <p class="auth-link">Bereits ein Konto? <a href="login.html">Jetzt anmelden</a></p>
+  </div>
+</div>
+
+<div class="auth-footer">
+  <a href="impressum.html">Impressum</a> · <a href="datenschutz.html">Datenschutz</a>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="firebase-config.js"></script>
+<script>
+const errorBox = document.getElementById("errorBox");
+function showError(msg){ errorBox.textContent = msg; errorBox.classList.add("show"); }
+
+document.getElementById("registerBtn").addEventListener("click", () => {
+  const name = document.getElementById("displayName").value.trim();
+  const email = document.getElementById("email").value.trim();
+  const pass = document.getElementById("password").value;
+  const pass2 = document.getElementById("password2").value;
+
+  if(!name || !email || !pass){ showError("Bitte alle Felder ausfüllen."); return; }
+  if(pass.length < 6){ showError("Das Passwort muss mindestens 6 Zeichen haben."); return; }
+  if(pass !== pass2){ showError("Die Passwörter stimmen nicht überein."); return; }
+
+  auth.createUserWithEmailAndPassword(email, pass)
+    .then(cred => {
+      return cred.user.updateProfile({ displayName: name }).then(() => {
+        return db.collection("users").doc(cred.user.uid).set({
+          name: name,
+          email: email,
+          erstelltAm: firebase.firestore.FieldValue.serverTimestamp(),
+          data: { groups: [] }
+        });
+      });
+    })
+    .then(() => { window.location.href = "index.html"; })
+    .catch(err => {
+      const messages = {
+        "auth/email-already-in-use": "Diese E-Mail wird bereits verwendet.",
+        "auth/invalid-email": "Ungültige E-Mail-Adresse.",
+        "auth/weak-password": "Das Passwort ist zu schwach."
+      };
+      showError(messages[err.code] || "Registrierung fehlgeschlagen: " + err.message);
+    });
+});
+</script>
+</body>
+</html>

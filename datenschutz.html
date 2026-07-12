@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Datenschutz – Anwesenheits Check</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="legal">
+  <a class="back-link" href="javascript:history.back()">‹ Zurück</a>
+  <h1>Datenschutzerklärung</h1>
+
+  <h2>1. Verantwortlicher</h2>
+  <p>
+    [Vor- und Nachname / Firmenname]<br>
+    [Straße, PLZ, Ort]<br>
+    E-Mail: [E-Mail-Adresse]
+  </p>
+
+  <h2>2. Erhobene Daten</h2>
+  <p>
+    Bei der Registrierung erheben und speichern wir folgende Daten: Name, E-Mail-Adresse sowie ein
+    verschlüsseltes Passwort. Innerhalb der Anwendung werden zusätzlich die von dir angelegten Gruppen,
+    Personen, Termine und Anwesenheitsvermerke gespeichert.
+  </p>
+
+  <h2>3. Speicherort</h2>
+  <p>
+    Alle Daten werden ausschließlich serverseitig in einer Firebase-Datenbank (Google Cloud) gespeichert.
+    Im Browser werden keine anwesenheitsrelevanten Daten dauerhaft abgelegt (kein lokales Speichern
+    personenbezogener Daten). Anbieter: Google Ireland Limited, Gordon House, Barrow Street, Dublin 4, Irland.
+  </p>
+
+  <h2>4. Rechtsgrundlage</h2>
+  <p>
+    Die Verarbeitung erfolgt zur Erfüllung eines Vertrags bzw. zur Durchführung vorvertraglicher Maßnahmen
+    (Art. 6 Abs. 1 lit. b DSGVO) sowie auf Grundlage deiner Einwilligung bei der Registrierung
+    (Art. 6 Abs. 1 lit. a DSGVO).
+  </p>
+
+  <h2>5. Speicherdauer</h2>
+  <p>
+    Deine Daten werden gespeichert, solange dein Konto besteht. Nach Löschung deines Kontos werden
+    alle zugehörigen Daten innerhalb von 30 Tagen unwiderruflich gelöscht.
+  </p>
+
+  <h2>6. Deine Rechte</h2>
+  <p>
+    Du hast jederzeit das Recht auf Auskunft, Berichtigung, Löschung, Einschränkung der Verarbeitung,
+    Datenübertragbarkeit sowie Widerspruch gegen die Verarbeitung deiner Daten. Wende dich hierzu an
+    die oben genannte Kontaktadresse.
+  </p>
+
+  <h2>7. Cookies / lokale Speicherung</h2>
+  <p>
+    Zur Aufrechterhaltung deiner Anmeldesitzung verwendet Firebase Authentication technisch notwendige
+    Sitzungsdaten im Browser. Diese enthalten keine Anwesenheits- oder Gruppendaten.
+  </p>
+
+  <p style="color:var(--muted);font-size:12px;margin-top:40px;">© <span id="year"></span> Anwesenheits Check</p>
+</div>
+<script>document.getElementById("year").textContent = new Date().getFullYear();</script>
+</body>
+</html>

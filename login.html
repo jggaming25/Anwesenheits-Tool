@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Login – Anwesenheits Check</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="auth-wrap">
+  <div class="auth-card">
+    <h2>Willkommen zurück</h2>
+    <p class="sub">Melde dich an, um deine Gruppen zu verwalten.</p>
+
+    <div class="auth-error" id="errorBox"></div>
+
+    <input type="email" id="email" placeholder="E-Mail-Adresse" autocomplete="username">
+    <input type="password" id="password" placeholder="Passwort" autocomplete="current-password">
+    <button class="btn btn-primary" id="loginBtn">Anmelden</button>
+
+    <p class="auth-link">Noch kein Konto? <a href="register.html">Jetzt registrieren</a></p>
+  </div>
+</div>
+
+<div class="auth-footer">
+  <a href="impressum.html">Impressum</a> · <a href="datenschutz.html">Datenschutz</a>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="firebase-config.js"></script>
+<script>
+const errorBox = document.getElementById("errorBox");
+function showError(msg){ errorBox.textContent = msg; errorBox.classList.add("show"); }
+
+auth.onAuthStateChanged(user => {
+  if(user) window.location.href = "index.html";
+});
+
+document.getElementById("loginBtn").addEventListener("click", () => {
+  const email = document.getElementById("email").value.trim();
+  const pass = document.getElementById("password").value;
+  if(!email || !pass){ showError("Bitte E-Mail und Passwort eingeben."); return; }
+
+  auth.signInWithEmailAndPassword(email, pass)
+    .then(() => { window.location.href = "index.html"; })
+    .catch(err => {
+      const messages = {
+        "auth/invalid-credential": "E-Mail oder Passwort ist falsch.",
+        "auth/user-not-found": "Kein Konto mit dieser E-Mail gefunden.",
+        "auth/wrong-password": "Falsches Passwort.",
+        "auth/invalid-email": "Ungültige E-Mail-Adresse.",
+        "auth/too-many-requests": "Zu viele Versuche. Bitte später erneut probieren."
+      };
+      showError(messages[err.code] || "Anmeldung fehlgeschlagen: " + err.message);
+    });
+});
+</script>
+</body>
+</html>

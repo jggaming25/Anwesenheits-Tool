@@ -1,0 +1,80 @@
+:root{
+  --primary:#2E7DF7; --primary-dark:#1E5FCB; --bg:#F4F6F9; --card:#FFFFFF;
+  --line:#E4E8ED; --text:#1C2530; --muted:#7B8794;
+  --anwesend:#2FAE60; --abwesend:#E5484D; --entschuldigt:#F5A623;
+}
+*{box-sizing:border-box;}
+body{margin:0;font-family:-apple-system,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--text);}
+
+/* ---------- Topbar (App) ---------- */
+.topbar{background:var(--primary);color:#fff;padding:14px 16px;display:flex;align-items:center;gap:10px;
+  position:sticky;top:0;z-index:10;box-shadow:0 2px 6px rgba(0,0,0,.15);}
+.topbar .back{cursor:pointer;font-size:20px;padding:2px 8px;border-radius:6px;}
+.topbar .back:hover{background:rgba(255,255,255,.15);}
+.topbar h1{font-size:18px;margin:0;font-weight:600;flex:1;}
+.topbar .icon-btn{cursor:pointer;font-size:18px;padding:2px 8px;border-radius:6px;}
+.topbar .icon-btn:hover{background:rgba(255,255,255,.15);}
+.container{max-width:640px;margin:0 auto;padding:16px;padding-bottom:80px;}
+.fab{position:fixed;bottom:22px;right:calc(50% - 320px + 22px);background:var(--primary);color:#fff;
+  width:54px;height:54px;border-radius:50%;border:none;font-size:26px;box-shadow:0 4px 12px rgba(0,0,0,.25);cursor:pointer;}
+@media(max-width:680px){ .fab{right:22px;} }
+
+/* ---------- Karten & Listen ---------- */
+.card{background:var(--card);border-radius:12px;padding:14px 16px;margin-bottom:10px;
+  box-shadow:0 1px 3px rgba(0,0,0,.06);display:flex;justify-content:space-between;align-items:center;
+  cursor:pointer;border:1px solid var(--line);}
+.card:active{background:#F0F3F7;}
+.card .info b{display:block;font-size:15px;}
+.card .info span{color:var(--muted);font-size:13px;}
+.badge{background:var(--line);color:var(--muted);font-size:12px;padding:3px 9px;border-radius:20px;}
+.tabs{display:flex;background:var(--card);border-radius:10px;overflow:hidden;margin-bottom:14px;border:1px solid var(--line);}
+.tab{flex:1;text-align:center;padding:10px;cursor:pointer;font-size:14px;font-weight:600;color:var(--muted);}
+.tab.active{color:var(--primary);border-bottom:3px solid var(--primary);}
+.empty{text-align:center;color:var(--muted);padding:40px 10px;font-size:14px;}
+.row{display:flex;justify-content:space-between;align-items:center;background:var(--card);
+  border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:8px;}
+.row .name{font-size:14px;font-weight:600;}
+.row .name small{display:block;color:var(--muted);font-weight:400;font-size:12px;}
+.status-btns{display:flex;gap:6px;}
+.status-btns button{border:1px solid var(--line);background:#fff;padding:7px 10px;border-radius:8px;
+  cursor:pointer;font-size:12px;font-weight:600;color:var(--muted);}
+.status-btns button.on-anwesend{background:var(--anwesend);color:#fff;border-color:var(--anwesend);}
+.status-btns button.on-abwesend{background:var(--abwesend);color:#fff;border-color:var(--abwesend);}
+.status-btns button.on-entschuldigt{background:var(--entschuldigt);color:#fff;border-color:var(--entschuldigt);}
+.note-input{width:100%;margin-top:8px;border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:13px;display:none;}
+.note-input.show{display:block;}
+.stat-bar-bg{width:100%;height:10px;background:var(--line);border-radius:5px;overflow:hidden;margin-top:6px;}
+.stat-bar-fill{height:100%;background:var(--anwesend);}
+.del{color:var(--abwesend);font-size:13px;cursor:pointer;padding:6px 8px;}
+
+/* ---------- Modal ---------- */
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.4);display:flex;align-items:flex-end;justify-content:center;z-index:20;}
+.modal{background:#fff;border-radius:16px 16px 0 0;padding:20px;width:100%;max-width:640px;}
+.modal h3{margin:0 0 14px;}
+.modal input,.modal select{width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:8px;margin-bottom:10px;font-size:14px;}
+.modal-btns{display:flex;gap:10px;margin-top:8px;}
+.btn{flex:1;padding:11px;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;}
+.btn-primary{background:var(--primary);color:#fff;}
+.btn-secondary{background:var(--line);color:var(--text);}
+
+/* ---------- Auth-Seiten (Login/Register) ---------- */
+.auth-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;}
+.auth-card{background:var(--card);border-radius:16px;padding:32px 28px;width:100%;max-width:380px;
+  box-shadow:0 8px 30px rgba(0,0,0,.08);border:1px solid var(--line);}
+.auth-card h2{margin:0 0 4px;font-size:22px;color:var(--primary);}
+.auth-card p.sub{color:var(--muted);font-size:13px;margin:0 0 22px;}
+.auth-card input{width:100%;padding:12px 14px;border:1px solid var(--line);border-radius:8px;margin-bottom:12px;font-size:14px;}
+.auth-card .btn-primary{width:100%;padding:12px;}
+.auth-error{background:#FDECEC;color:var(--abwesend);font-size:13px;padding:9px 12px;border-radius:8px;margin-bottom:12px;display:none;}
+.auth-error.show{display:block;}
+.auth-link{text-align:center;margin-top:16px;font-size:13px;color:var(--muted);}
+.auth-link a{color:var(--primary);text-decoration:none;font-weight:600;}
+.auth-footer{text-align:center;margin-top:22px;font-size:12px;color:var(--muted);}
+.auth-footer a{color:var(--muted);margin:0 6px;}
+
+/* ---------- Rechtstexte ---------- */
+.legal{max-width:720px;margin:0 auto;padding:30px 20px 60px;line-height:1.6;font-size:14px;}
+.legal h1{color:var(--primary);font-size:24px;}
+.legal h2{font-size:16px;margin-top:26px;}
+.legal a{color:var(--primary);}
+.legal .back-link{display:inline-block;margin-bottom:20px;color:var(--primary);text-decoration:none;font-size:13px;}
