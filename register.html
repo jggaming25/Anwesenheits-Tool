@@ -54,10 +54,17 @@ document.getElementById("registerBtn").addEventListener("click", () => {
           name: name,
           email: email.toLowerCase(),
           createdAt: firebase.firestore.FieldValue.serverTimestamp()
-        }).then(() => cred.user.sendEmailVerification());
-      });
+        });
+      }).then(() => cred.user);
     })
-    .then(() => { window.location.href = "index.html"; })
+    .then(user => {
+      // E-Mail-Versand getrennt behandeln: Registrierung soll auch klappen,
+      // wenn der Versand aus irgendeinem Grund fehlschlägt – Fehler wird dann sichtbar angezeigt.
+      user.sendEmailVerification()
+        .then(()=> console.log("Bestätigungs-E-Mail wurde von Firebase angenommen."))
+        .catch(err => alert("Bestätigungs-E-Mail konnte nicht gesendet werden: " + err.message + "\n\nDu kannst sie später erneut über 'Mein Konto' anfordern."));
+      window.location.href = "index.html";
+    })
     .catch(err => {
       const messages = {
         "auth/email-already-in-use": "Diese E-Mail wird bereits verwendet.",

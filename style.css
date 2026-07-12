@@ -120,3 +120,23 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Roboto,sans-serif;background:
 @keyframes spin{to{transform:rotate(360deg);}}
 .disabled{opacity:.5;pointer-events:none;}
 
+/* ---------- Statistik ---------- */
+.stat-cards{display:flex;gap:8px;margin-bottom:16px;}
+.stat-card{flex:1;background:var(--card);border:1px solid var(--line);border-radius:12px;
+  padding:14px 8px;text-align:center;}
+.stat-num{font-size:20px;font-weight:700;color:var(--primary);}
+.stat-label{font-size:11px;color:var(--muted);margin-top:2px;}
+.stat-section-title{font-size:13px;font-weight:700;color:var(--text);margin:18px 2px 8px;}
+.stat-table{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--line);
+  border-radius:12px;overflow:hidden;font-size:13px;}
+.stat-table th{background:#F0F3F7;color:var(--muted);font-size:11px;text-align:left;padding:8px 10px;font-weight:600;}
+.stat-table td{padding:9px 10px;border-top:1px solid var(--line);}
+.stat-table th:nth-child(2),.stat-table th:nth-child(3),.stat-table th:nth-child(4),
+.stat-table td:nth-child(2),.stat-table td:nth-child(3),.stat-table td:nth-child(4){text-align:center;width:34px;}
+.stat-table .c-anwesend{color:var(--anwesend);font-weight:700;}
+.stat-table .c-entschuldigt{color:var(--entschuldigt);font-weight:700;}
+.stat-table .c-abwesend{color:var(--abwesend);font-weight:700;}
+.mini-bar-bg{display:inline-block;width:70px;height:8px;background:var(--line);border-radius:4px;overflow:hidden;vertical-align:middle;}
+.mini-bar-fill{height:100%;background:var(--anwesend);}
+.mini-bar-pct{font-size:11px;color:var(--muted);margin-left:6px;}
+

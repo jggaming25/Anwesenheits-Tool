@@ -287,6 +287,81 @@ function groupOverallRate(g){
   if(!rates.length) return 0;
   return Math.round(rates.reduce((a,b)=>a+b,0)/rates.length*10)/10;
 }
+function personCounts(g, personId){
+  let anwesend=0, entschuldigt=0, abwesend=0;
+  (g.termine||[]).forEach(t=>{
+    const s = (t.status||{})[personId];
+    if(s==="anwesend") anwesend++;
+    else if(s==="entschuldigt") entschuldigt++;
+    else if(s==="abwesend") abwesend++;
+  });
+  return { anwesend, entschuldigt, abwesend, total: anwesend+entschuldigt+abwesend };
+}
+function terminCounts(t){
+  let anwesend=0, entschuldigt=0, abwesend=0;
+  Object.values(t.status||{}).forEach(s=>{
+    if(s==="anwesend") anwesend++; else if(s==="entschuldigt") entschuldigt++; else if(s==="abwesend") abwesend++;
+  });
+  return { anwesend, entschuldigt, abwesend };
+}
+function renderStatistik(g){
+  const overall = groupOverallRate(g);
+  const anzahlTermine = (g.termine||[]).length;
+  const anzahlPersonen = (g.personen||[]).length;
+
+  const overview = `
+    <div class="stat-cards">
+      <div class="stat-card"><div class="stat-num">${overall}%</div><div class="stat-label">Ø Anwesenheit</div></div>
+      <div class="stat-card"><div class="stat-num">${anzahlTermine}</div><div class="stat-label">Termine</div></div>
+      <div class="stat-card"><div class="stat-num">${anzahlPersonen}</div><div class="stat-label">Personen</div></div>
+    </div>`;
+
+  let personTable = "";
+  if(anzahlPersonen){
+    personTable = `
+      <div class="stat-section-title">Pro Person</div>
+      <table class="stat-table">
+        <thead><tr><th>Name</th><th>✔</th><th>⏱</th><th>✘</th><th>Quote</th></tr></thead>
+        <tbody>
+          ${g.personen.map(p=>{
+            const c = personCounts(g, p.id);
+            const r = rate(g, p.id);
+            return `<tr>
+              <td>${escapeHtml(p.name)}</td>
+              <td class="c-anwesend">${c.anwesend}</td>
+              <td class="c-entschuldigt">${c.entschuldigt}</td>
+              <td class="c-abwesend">${c.abwesend}</td>
+              <td><div class="mini-bar-bg"><div class="mini-bar-fill" style="width:${r}%"></div></div><span class="mini-bar-pct">${r}%</span></td>
+            </tr>`;
+          }).join("")}
+        </tbody>
+      </table>`;
+  } else {
+    personTable = `<div class="empty">Keine Personen vorhanden.</div>`;
+  }
+
+  let terminTable = "";
+  if(anzahlTermine){
+    terminTable = `
+      <div class="stat-section-title">Pro Termin</div>
+      <table class="stat-table">
+        <thead><tr><th>Termin</th><th>✔</th><th>⏱</th><th>✘</th></tr></thead>
+        <tbody>
+          ${g.termine.map(t=>{
+            const c = terminCounts(t);
+            return `<tr>
+              <td>${escapeHtml(t.bezeichnung)}<br><small style="color:var(--muted)">${formatDatum(t.datum)}</small></td>
+              <td class="c-anwesend">${c.anwesend}</td>
+              <td class="c-entschuldigt">${c.entschuldigt}</td>
+              <td class="c-abwesend">${c.abwesend}</td>
+            </tr>`;
+          }).join("")}
+        </tbody>
+      </table>`;
+  }
+
+  return overview + personTable + terminTable;
+}
 
 // ---------- Export ----------
 function exportCSV(g){
@@ -354,8 +429,18 @@ async function resetPasswordFor(email){
 
 // ---------- Konto ----------
 async function resendVerification(){
-  try{ await currentUser.sendEmailVerification(); toast("Bestätigungs-E-Mail gesendet"); }
-  catch(e){ toast("Fehler: " + e.message); }
+  try{
+    await currentUser.reload();
+    if(currentUser.emailVerified){ toast("E-Mail ist bereits bestätigt."); render(); return; }
+    await currentUser.sendEmailVerification();
+    toast("Bestätigungs-E-Mail gesendet – auch im Spam-Ordner nachsehen.");
+  }catch(e){
+    if(e.code === "auth/too-many-requests"){
+      alert("Zu viele Anfragen. Bitte warte ein paar Minuten und versuche es erneut.");
+    } else {
+      alert("Bestätigungs-E-Mail konnte nicht gesendet werden: " + e.message);
+    }
+  }
 }
 async function selfPasswordReset(){
   try{ await auth.sendPasswordResetEmail(currentUser.email); toast("E-Mail zum Passwort-Ändern gesendet"); }
@@ -594,20 +679,7 @@ function render(){
       if(!members.length && !pending.length) body = `<div class="empty">Noch keine Mitarbeiter.</div>`;
       if(!owner) body = `<div class="empty" style="padding-bottom:6px;">Nur der Ersteller kann Mitarbeiter verwalten.</div>` + body;
     } else if(nav.tab==="statistik"){
-      const overall = groupOverallRate(g);
-      body = `<div class="row" style="display:block;">
-          <div class="name">Ø Anwesenheit der Gruppe</div>
-          <div class="stat-bar-bg"><div class="stat-bar-fill" style="width:${overall}%"></div></div>
-          <small style="color:var(--muted)">${overall}% · ${(g.termine||[]).length} Termine erfasst</small>
-        </div>` +
-        ((g.personen||[]).length ? g.personen.map(p=>{
-          const r = rate(g, p.id);
-          return `<div class="row" style="display:block;">
-            <div class="name">${escapeHtml(p.name)}</div>
-            <div class="stat-bar-bg"><div class="stat-bar-fill" style="width:${r}%"></div></div>
-            <small style="color:var(--muted)">${r}% Anwesenheit</small>
-          </div>`;
-        }).join("") : `<div class="empty">Keine Personen vorhanden.</div>`);
+      body = renderStatistik(g);
     }
 
     app.innerHTML = `
