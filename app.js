@@ -770,6 +770,12 @@ function submitEditMitarbeiter(memberUid){
 
 // ---------- Rendering ----------
 function render(){
+  // Sicherstellen, dass ein unbestätigtes Konto sofort die Verifizierung sieht –
+  // unabhängig davon, wie render() ausgelöst wurde (nicht nur über goto()).
+  if(!currentUserData?.emailVerified && nav.view!=="verify" && nav.view!=="konto"){
+    nav.view = "verify";
+  }
+
   const app = document.getElementById("app");
   const back = document.getElementById("backBtn");
   const exportBtn = document.getElementById("exportBtn");
@@ -834,11 +840,13 @@ function renderKonto(){
   document.getElementById("fabBtn").style.display = "none";
   const app = document.getElementById("app");
   const s = currentUserData?.settings || {};
+  const verified = currentUserData?.emailVerified === true;
   app.innerHTML = `
       <div class="account-card">
         <h3>${escapeHtml(currentUserData?.name || "")}</h3>
         <p>${escapeHtml(currentUser.email)}</p>
-        <span class="verify-badge ok">✔ Konto bestätigt</span>
+        <span class="verify-badge ${verified?'ok':'no'}">${verified?"✔ Konto bestätigt":"⚠ Noch nicht bestätigt"}</span>
+        ${!verified ? `<div><button class="btn btn-primary" onclick="goto('verify')">Jetzt bestätigen</button></div>` : ""}
       </div>
       <div class="account-card">
         <h3>E-Mail-Adresse ändern</h3>
