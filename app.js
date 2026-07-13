@@ -190,10 +190,10 @@ async function openGroup(groupId){ goto("group", { groupId, tab: "termine" }); }
 function subscribeGroup(groupId){
   if(unsubGroup) unsubGroup();
   currentGroup = null;
-  unsubGroup = db.collection("groups").doc(groupId).onSnapshot(doc => {
+  unsubGroup = db.collection("groups").doc(groupId).onSnapshot(async doc => {
     if(!doc.exists){ currentGroup = null; goto("groups"); return; }
     currentGroup = { id: doc.id, ...doc.data() };
-    tryAcquireLock(groupId);
+    await tryAcquireLock(groupId);
     scheduleRender();
   }, err => toast("Fehler: " + err.message));
 }
@@ -210,15 +210,26 @@ async function tryAcquireLock(groupId){
         iHoldLock = true;
       } else { iHoldLock = false; }
     });
-  }catch(e){ iHoldLock = false; }
+  }catch(e){
+    console.error("Sperre konnte nicht aktualisiert werden:", e);
+    // iHoldLock bewusst NICHT hart auf false setzen – der nächste Heartbeat-Tick
+    // versucht es automatisch erneut, statt Buttons dauerhaft zu verstecken.
+  }
   startHeartbeat(groupId);
 }
 function startHeartbeat(groupId){
   if(heartbeatTimer) clearInterval(heartbeatTimer);
-  heartbeatTimer = setInterval(() => {
-    if(!iHoldLock || !currentGroup || currentGroup.id !== groupId) return;
-    db.collection("groups").doc(groupId).update({ "editLock.ts": nowMs() }).catch(()=>{});
-  }, 10000);
+  heartbeatTimer = setInterval(async () => {
+    if(!currentGroup || currentGroup.id !== groupId) return;
+    if(iHoldLock){
+      try{ await db.collection("groups").doc(groupId).update({ "editLock.ts": nowMs() }); }
+      catch(e){ console.error(e); }
+    } else {
+      // Sperre evtl. inzwischen frei geworden oder abgelaufen -> automatisch neu versuchen
+      await tryAcquireLock(groupId);
+      scheduleRender();
+    }
+  }, 8000);
 }
 async function releaseLock(){
   if(!iHoldLock || !currentGroup) return;
@@ -262,10 +273,25 @@ let currentLogs = [];
 function subscribeLogs(groupId){
   if(unsubLogs) unsubLogs();
   currentLogs = [];
+  cleanupOldLogs(groupId);
   unsubLogs = db.collection("groups").doc(groupId).collection("logs")
     .orderBy("ts","desc").limit(50)
     .onSnapshot(snap => { currentLogs = snap.docs.map(d=>({id:d.id, ...d.data()})); scheduleRender(); },
       err => toast("Fehler beim Laden der Logs: " + err.message));
+}
+// Löscht Logs älter als 30 Tage. Läuft nur, wenn der Ersteller den Logs-Tab öffnet
+// (rein clientseitig – siehe README für eine echte Cloud-Function-Lösung, die auch
+// läuft, ohne dass jemand die App geöffnet hat).
+async function cleanupOldLogs(groupId){
+  const cutoff = nowMs() - 30*24*60*60*1000;
+  try{
+    const oldLogs = await db.collection("groups").doc(groupId).collection("logs")
+      .where("ts","<", new Date(cutoff)).limit(200).get();
+    if(oldLogs.empty) return;
+    const batch = db.batch();
+    oldLogs.docs.forEach(d => batch.delete(d.ref));
+    await batch.commit();
+  }catch(e){ console.error("Log-Bereinigung fehlgeschlagen:", e); }
 }
 
 // ---------- Toast ----------
@@ -389,6 +415,12 @@ async function setNote(g, terminId, personId, text){
   const termine = (g.termine||[]).map(t => t.id===terminId ? {...t, notizen:{...t.notizen,[personId]:text}} : t);
   try{ await db.collection("groups").doc(g.id).update({ termine }); }
   catch(e){ toast("Fehler: " + e.message); }
+}
+function saveNoteField(terminId, personId){
+  const input = document.getElementById(`note-${terminId}-${personId}`);
+  if(!input) return;
+  setNote(currentGroup, terminId, personId, input.value);
+  toast("✓ Notiz gespeichert");
 }
 
 // ---------- Statistik ----------
@@ -967,9 +999,10 @@ function renderTermin(g){
             <button class="clear-btn ${dis}" title="Zurücksetzen" onclick="clearStatus(currentGroup,'${t.id}','${p.id}')">↺</button>
           </div>
         </div>
-        <input class="note-input ${(t.notizen||{})[p.id]?'show':''} ${dis}" placeholder="Notiz..." value="${escapeAttr((t.notizen||{})[p.id]||'')}"
-          onfocus="this.classList.add('show')"
-          onchange="setNote(currentGroup,'${t.id}','${p.id}', this.value)">
+        <div class="note-row ${dis}">
+          <input class="note-input show" id="note-${t.id}-${p.id}" placeholder="Notiz zu dieser Person bei diesem Termin..." value="${escapeAttr((t.notizen||{})[p.id]||'')}">
+          <button class="note-save-btn" title="Notiz speichern" onclick="saveNoteField('${t.id}','${p.id}')">💾</button>
+        </div>
       </div>`;
     }).join("") : `<div class="empty">Diese Gruppe hat noch keine Personen.</div>`;
 

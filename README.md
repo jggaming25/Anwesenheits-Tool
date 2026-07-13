@@ -81,6 +81,7 @@ service cloud.firestore {
       match /logs/{logId} {
         allow read: if isSignedIn() && request.auth.uid == get(/databases/$(database)/documents/groups/$(groupId)).data.ownerUid;
         allow create: if isSignedIn();
+        allow delete: if isSignedIn();
       }
     }
 
@@ -118,6 +119,26 @@ Wenn E-Mails (egal ob Firebase-Standard oder EmailJS) nicht ankommen:
 - Bei EmailJS: im EmailJS-Dashboard unter "Email History" nachsehen, ob der Versand dort als
   erfolgreich oder fehlgeschlagen protokolliert wurde – das zeigt sofort, ob es an Firebase/EmailJS
   oder am E-Mail-Anbieter des Empfängers liegt
+
+## 7. Log-Bereinigung (30 Tage)
+Standardmäßig läuft die Bereinigung **automatisch clientseitig**: Sobald der Gruppen-Ersteller
+den "Logs"-Tab öffnet, werden Einträge, die älter als 30 Tage sind, gelöscht. Das reicht für die
+meisten Fälle, setzt aber voraus, dass irgendwann mal jemand den Tab öffnet.
+
+**Optional – echtes Hintergrund-Löschen ganz ohne geöffnete App:**
+Dafür liegt im Ordner `functions/` eine fertige Cloud Function bereit. Setup (benötigt Node.js
+auf deinem Computer sowie den Blaze-Tarif in Firebase – bei dieser Nutzungsgröße praktisch kostenlos):
+
+```
+npm install -g firebase-tools
+firebase login
+firebase init functions   (im Projektordner, bestehenden "functions"-Ordner auswählen)
+cd functions && npm install
+firebase deploy --only functions
+```
+
+Danach läuft `cleanupOldLogs` einmal täglich automatisch im Hintergrund – unabhängig davon,
+ob die App gerade geöffnet ist.
 
 ## Dateien
 - `login.html` / `register.html` – Anmeldung, Registrierung (mit Code-Versand), Einladungs-Link-Anmeldung
