@@ -8,7 +8,7 @@
 // Anleitung siehe README.md, Abschnitt "EmailJS einrichten".
 // ==========================================================
 const EMAILJS_PUBLIC_KEY   = "DEIN_PUBLIC_KEY";
-const EMAILJS_SERVICE_ID   = "DEIN_SERVICE_ID";
+const EMAILJS_SERVICE_ID   = "service_6bd9q0v";
 const EMAILJS_TEMPLATE_VERIFY = "DEIN_TEMPLATE_ID"; // Template für 6-stelligen Bestätigungscode
 
 if(typeof emailjs !== "undefined"){
