@@ -6,7 +6,7 @@ let currentUser = null;
 let currentUserData = null;
 let groupsOwner = [], groupsMember = [];
 let unsubOwner=null, unsubMember=null, unsubGroup=null, unsubLogs=null;
-let heartbeatTimer=null, countdownTimer=null;
+let heartbeatTimer=null, countdownTimer=null, renderDebounceTimer=null;
 let currentGroup = null;
 let iHoldLock = false;
 let autoRefreshEnabled = true;
@@ -84,6 +84,7 @@ function cleanupListeners(){
   if(unsubLogs) unsubLogs();
   if(heartbeatTimer) clearInterval(heartbeatTimer);
   if(countdownTimer) clearInterval(countdownTimer);
+  clearTimeout(renderDebounceTimer);
 }
 window.addEventListener("beforeunload", () => { releaseLock(true); });
 
@@ -112,11 +113,14 @@ function toggleDarkMode(on){
 }
 
 // ---------- Live-Rendering / Refresh-Steuerung ----------
+let _rafId = null;
 function scheduleRender(){
   pendingRenderFlag = true;
   if(!autoRefreshEnabled) { render_gate_only(); return; }
   if(isTypingActive()) return;
-  applyPending();
+  if(!_rafId){
+    _rafId = requestAnimationFrame(()=>{ _rafId = null; applyPending(); });
+  }
 }
 function applyPending(){ pendingRenderFlag = false; render(); }
 // Aktualisiert nur unkritische UI-Teile (z. B. Badges), ohne offene Eingaben zu stören,
@@ -950,16 +954,33 @@ function renderGroup(g){
     body = owner ? renderLogs() : `<div class="empty">Nur der Ersteller kann das Verlaufsprotokoll einsehen.</div>`;
   }
 
-  const tabsHtml = `<div class="tabs">
-      <div class="tab ${nav.tab==='termine'?'active':''}" onclick="goto('group',{tab:'termine'})">Termine</div>
-      <div class="tab ${nav.tab==='personen'?'active':''}" onclick="goto('group',{tab:'personen'})">Personen</div>
-      <div class="tab ${nav.tab==='mitarbeiter'?'active':''}" onclick="goto('group',{tab:'mitarbeiter'})">Team</div>
-      <div class="tab ${nav.tab==='statistik'?'active':''}" onclick="goto('group',{tab:'statistik'})">Statistik</div>
-      ${owner ? `<div class="tab ${nav.tab==='logs'?'active':''}" onclick="goto('group',{tab:'logs'})">Logs</div>` : ""}
-    </div>`;
+  const deleteLink = (nav.tab==='termine' && owner) ? `<div class="empty" style="padding-top:6px;"><span class="del" style="color:var(--muted)" onclick="deleteGroup(currentGroup)">Gruppe löschen</span></div>` : "";
 
-  document.getElementById("app").innerHTML = lockBanner + tabsHtml + body +
-    ((nav.tab==='termine' && owner) ? `<div class="empty" style="padding-top:6px;"><span class="del" style="color:var(--muted)" onclick="deleteGroup(currentGroup)">Gruppe löschen</span></div>` : "");
+  const app = document.getElementById("app");
+  const existingTabs = app.querySelectorAll(".tab");
+  const expectedTabCount = owner ? 5 : 4;
+  if(!existingTabs.length || existingTabs.length !== expectedTabCount){
+    const tabsHtml = `<div class="tabs">
+        <div class="tab ${nav.tab==='termine'?'active':''}" onclick="goto('group',{tab:'termine'})">Termine</div>
+        <div class="tab ${nav.tab==='personen'?'active':''}" onclick="goto('group',{tab:'personen'})">Personen</div>
+        <div class="tab ${nav.tab==='mitarbeiter'?'active':''}" onclick="goto('group',{tab:'mitarbeiter'})">Team</div>
+        <div class="tab ${nav.tab==='statistik'?'active':''}" onclick="goto('group',{tab:'statistik'})">Statistik</div>
+        ${owner ? `<div class="tab ${nav.tab==='logs'?'active':''}" onclick="goto('group',{tab:'logs'})">Logs</div>` : ""}
+      </div>`;
+    app.innerHTML = `<div class="lock-banner-slot"></div>${tabsHtml}<div class="group-content"></div>`;
+  }
+
+  const bannerSlot = app.querySelector(".lock-banner-slot");
+  if(bannerSlot) bannerSlot.innerHTML = lockBanner;
+
+  const tabs = app.querySelectorAll(".tab");
+  const tabNames = owner ? ["termine","personen","mitarbeiter","statistik","logs"] : ["termine","personen","mitarbeiter","statistik"];
+  tabs.forEach((el, i) => {
+    el.classList.toggle("active", tabNames[i] === nav.tab);
+  });
+
+  const contentSlot = app.querySelector(".group-content");
+  if(contentSlot) contentSlot.innerHTML = body + deleteLink;
 }
 
 function renderLogs(){
