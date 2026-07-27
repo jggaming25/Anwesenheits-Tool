@@ -188,13 +188,15 @@ function filteredGroups(){
 }
 
 // ---------- Gruppe öffnen / schließen + Live-Sperre ----------
-async function openGroup(groupId){ goto("group", { groupId, tab: "termine" }); tryAcquireLock(groupId); }
+async function openGroup(groupId){ console.log("[DBG] openGroup", groupId, "currentUser:", currentUser?.uid, "verified:", currentUserData?.emailVerified); goto("group", { groupId, tab: "termine" }); tryAcquireLock(groupId); }
 
 function subscribeGroup(groupId){
+  console.log("[DBG] subscribeGroup called with", groupId);
   if(unsubGroup) unsubGroup();
   currentGroup = null;
   accessDeniedGroup = null;
   unsubGroup = db.collection("groups").doc(groupId).onSnapshot(async doc => {
+    console.log("[DBG] onSnapshot fired, doc.exists:", doc.exists);
     if(!doc.exists){ currentGroup = null; goto("groups"); return; }
     currentGroup = { id: doc.id, ...doc.data() };
     if(!isAccessAllowed(currentGroup)){
@@ -206,7 +208,7 @@ function subscribeGroup(groupId){
     }
     accessDeniedGroup = null;
     scheduleRender();
-  }, err => toast("Fehler: " + err.message));
+  }, err => { console.error("[DBG] onSnapshot ERROR:", err); toast("Fehler: " + err.message); });
 }
 let lockFailCount = 0;
 const LOCK_MAX_FAILS = 3;
