@@ -8,7 +8,8 @@ body.dark{
   --anwesend:#3FCB78; --abwesend:#FF6B6B; --entschuldigt:#FFB84D;
 }
 *{box-sizing:border-box;}
-body{margin:0;font-family:-apple-system,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--text);transition:background .2s,color .2s;}
+body{margin:0;font-family:-apple-system,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--text);transition:background .2s,color .2s;
+  -webkit-tap-highlight-color:transparent;}
 
 /* ---------- Topbar (App) ---------- */
 .topbar{background:var(--primary);color:#fff;padding:14px 16px;display:flex;align-items:center;gap:10px;
@@ -25,20 +26,20 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Roboto,sans-serif;background:
 .container{max-width:640px;margin:0 auto;padding:16px;padding-bottom:90px;}
 .fab{position:fixed;bottom:calc(26px + env(safe-area-inset-bottom));right:calc(50% - 320px + 22px);
   background:var(--primary);color:#fff;width:58px;height:58px;border-radius:50%;border:none;font-size:28px;
-  box-shadow:0 6px 18px rgba(0,0,0,.3);cursor:pointer;z-index:15;}
+  box-shadow:0 6px 18px rgba(0,0,0,.3);cursor:pointer;z-index:15;touch-action:manipulation;}
 .fab:active{transform:scale(0.94);}
 @media(max-width:680px){ .fab{right:22px;} }
 
 /* ---------- Karten & Listen ---------- */
 .card{background:var(--card);border-radius:12px;padding:14px 16px;margin-bottom:10px;
   box-shadow:0 1px 3px rgba(0,0,0,.06);display:flex;justify-content:space-between;align-items:center;
-  cursor:pointer;border:1px solid var(--line);}
+  cursor:pointer;border:1px solid var(--line);touch-action:manipulation;user-select:none;}
 .card:active{filter:brightness(0.97);}
 .card .info b{display:block;font-size:15px;}
 .card .info span{color:var(--muted);font-size:13px;}
 .badge{background:var(--line);color:var(--muted);font-size:12px;padding:3px 9px;border-radius:20px;}
 .tabs{display:flex;background:var(--card);border-radius:10px;overflow:auto;margin-bottom:14px;border:1px solid var(--line);}
-.tab{flex:1;text-align:center;padding:10px 6px;cursor:pointer;font-size:13px;font-weight:600;color:var(--muted);white-space:nowrap;}
+.tab{flex:1;text-align:center;padding:10px 6px;cursor:pointer;font-size:13px;font-weight:600;color:var(--muted);white-space:nowrap;touch-action:manipulation;user-select:none;}
 .tab.active{color:var(--primary);border-bottom:3px solid var(--primary);}
 .empty{text-align:center;color:var(--muted);padding:40px 10px;font-size:14px;}
 .row{display:flex;justify-content:space-between;align-items:center;background:var(--card);
@@ -47,7 +48,7 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Roboto,sans-serif;background:
 .row .name small{display:block;color:var(--muted);font-weight:400;font-size:12px;}
 .status-btns{display:flex;gap:6px;flex-wrap:wrap;}
 .status-btns button{border:1px solid var(--line);background:var(--card);padding:7px 10px;border-radius:8px;
-  cursor:pointer;font-size:12px;font-weight:600;color:var(--muted);}
+  cursor:pointer;font-size:12px;font-weight:600;color:var(--muted);touch-action:manipulation;user-select:none;}
 .status-btns button.on-anwesend{background:var(--anwesend);color:#fff;border-color:var(--anwesend);}
 .status-btns button.on-abwesend{background:var(--abwesend);color:#fff;border-color:var(--abwesend);}
 .status-btns button.on-entschuldigt{background:var(--entschuldigt);color:#fff;border-color:var(--entschuldigt);}
@@ -72,7 +73,7 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Roboto,sans-serif;background:
 .modal input,.modal select{width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:8px;margin-bottom:10px;
   font-size:14px;background:var(--bg);color:var(--text);}
 .modal-btns{display:flex;gap:10px;margin-top:8px;}
-.btn{flex:1;padding:11px;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;}
+.btn{flex:1;padding:11px;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;touch-action:manipulation;}
 .btn-primary{background:var(--primary);color:#fff;}
 .btn-secondary{background:var(--line);color:var(--text);}
 
@@ -126,7 +127,7 @@ body.dark .lock-banner.mine{background:#123122;color:#8FE8B4;}
 .pill.owner{background:#E7F0FF;color:var(--primary);}
 .pill.pending{background:#FFF4E5;color:#8A5A00;}
 .m-actions{display:flex;gap:6px;}
-.m-actions button{border:1px solid var(--line);background:var(--card);color:var(--text);border-radius:8px;padding:6px 9px;font-size:12px;cursor:pointer;}
+.m-actions button{border:1px solid var(--line);background:var(--card);color:var(--text);border-radius:8px;padding:6px 9px;font-size:12px;cursor:pointer;touch-action:manipulation;}
 .m-actions button.danger{color:var(--abwesend);border-color:#F5C6C6;}
 
 /* ---------- Konto ---------- */
@@ -181,7 +182,7 @@ body.dark .lock-banner.mine{background:#123122;color:#8FE8B4;}
   background:var(--card);color:var(--text);font-size:14px;margin-bottom:8px;}
 .filter-chips{display:flex;gap:8px;}
 .chip{padding:6px 14px;border-radius:20px;background:var(--card);border:1px solid var(--line);
-  font-size:12px;color:var(--muted);cursor:pointer;font-weight:600;}
+  font-size:12px;color:var(--muted);cursor:pointer;font-weight:600;touch-action:manipulation;user-select:none;}
 .chip.active{background:var(--primary);color:#fff;border-color:var(--primary);}
 
 /* ---------- Logs ---------- */
@@ -194,5 +195,5 @@ body.dark .lock-banner.mine{background:#123122;color:#8FE8B4;}
 /* ---------- Termin: grüner Speichern-Button ---------- */
 .save-btn-inline{display:block;width:100%;margin-top:16px;background:var(--anwesend);color:#fff;
   padding:14px;border:none;border-radius:12px;font-size:15px;font-weight:700;cursor:pointer;
-  box-shadow:0 3px 10px rgba(47,174,96,.3);}
+  box-shadow:0 3px 10px rgba(47,174,96,.3);touch-action:manipulation;}
 .save-btn-inline:active{filter:brightness(0.95);}

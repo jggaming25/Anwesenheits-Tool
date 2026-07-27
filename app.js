@@ -212,12 +212,13 @@ async function tryAcquireLock(groupId){
       if(!lock || lock.uid === currentUser.uid || stale){
         t.update(ref, { editLock: { uid: currentUser.uid, name: currentUserData?.name || currentUser.email, ts: nowMs() } });
         iHoldLock = true;
-      } else { iHoldLock = false; }
+      } else {
+        iHoldLock = false;
+      }
     });
   }catch(e){
     console.error("Sperre konnte nicht aktualisiert werden:", e);
-    // iHoldLock bewusst NICHT hart auf false setzen – der nächste Heartbeat-Tick
-    // versucht es automatisch erneut, statt Buttons dauerhaft zu verstecken.
+    iHoldLock = false;
   }
   startHeartbeat(groupId);
 }
@@ -265,6 +266,10 @@ function goto(view, extra={}){
 function getTermin(g, id){ return (g.termine||[]).find(t=>t.id===id); }
 
 // ---------- Logs ----------
+const LOG_RETENTION_MS = 365 * 24 * 60 * 60 * 1000; // 12 Monate
+let lastCleanupAt = 0;
+const CLEANUP_INTERVAL_MS = 24 * 60 * 60 * 1000; // max. einmal pro Tag aufräumen
+
 async function writeLog(groupId, action, details){
   try{
     await db.collection("groups").doc(groupId).collection("logs").add({
@@ -277,24 +282,33 @@ let currentLogs = [];
 function subscribeLogs(groupId){
   if(unsubLogs) unsubLogs();
   currentLogs = [];
-  cleanupOldLogs(groupId);
+  maybeCleanupOldLogs(groupId);
   unsubLogs = db.collection("groups").doc(groupId).collection("logs")
-    .orderBy("ts","desc").limit(50)
+    .orderBy("ts","desc")
     .onSnapshot(snap => { currentLogs = snap.docs.map(d=>({id:d.id, ...d.data()})); scheduleRender(); },
       err => toast("Fehler beim Laden der Logs: " + err.message));
 }
-// Löscht Logs älter als 30 Tage. Läuft nur, wenn der Ersteller den Logs-Tab öffnet
-// (rein clientseitig – siehe README für eine echte Cloud-Function-Lösung, die auch
-// läuft, ohne dass jemand die App geöffnet hat).
+async function maybeCleanupOldLogs(groupId){
+  if(Date.now() - lastCleanupAt < CLEANUP_INTERVAL_MS) return;
+  lastCleanupAt = Date.now();
+  await cleanupOldLogs(groupId);
+}
 async function cleanupOldLogs(groupId){
-  const cutoff = nowMs() - 30*24*60*60*1000;
+  const cutoff = Date.now() - LOG_RETENTION_MS;
   try{
-    const oldLogs = await db.collection("groups").doc(groupId).collection("logs")
-      .where("ts","<", new Date(cutoff)).limit(200).get();
-    if(oldLogs.empty) return;
-    const batch = db.batch();
-    oldLogs.docs.forEach(d => batch.delete(d.ref));
-    await batch.commit();
+    let deleted = 0;
+    let hasMore = true;
+    while(hasMore){
+      const oldLogs = await db.collection("groups").doc(groupId).collection("logs")
+        .where("ts","<", new Date(cutoff)).limit(500).get();
+      if(oldLogs.empty){ hasMore = false; break; }
+      const batch = db.batch();
+      oldLogs.docs.forEach(d => batch.delete(d.ref));
+      await batch.commit();
+      deleted += oldLogs.size;
+      if(oldLogs.size < 500) hasMore = false;
+    }
+    if(deleted > 0) console.log(`Logs-Bereinigung: ${deleted} Einträge (>12 Monate) gelöscht.`);
   }catch(e){ console.error("Log-Bereinigung fehlgeschlagen:", e); }
 }
 
@@ -326,19 +340,23 @@ function showConfirm(message, actionLabel, onConfirm){
 // ---------- Aktionen: Gruppen ----------
 async function addGroup(name){
   try{
-    await db.collection("groups").add({
+    const ref = await db.collection("groups").add({
       name, ownerUid: currentUser.uid, ownerEmail: currentUser.email,
       members: [currentUser.uid],
       memberInfo: { [currentUser.uid]: { email: currentUser.email, name: currentUserData?.name || currentUser.email, addedAt: nowMs(), role: "owner" } },
       pendingInvites: {}, personen: [], termine: [], editLock: null,
       createdAt: firebase.firestore.FieldValue.serverTimestamp()
     });
+    await writeLog(ref.id, "gruppe_erstellt", `Gruppe "${name}" wurde erstellt`);
     toast("Gruppe erstellt");
   }catch(e){ toast("Fehler: " + e.message); }
 }
 function deleteGroup(g){
   showConfirm(`Gruppe "${g.name}" inkl. aller Termine und Personen unwiderruflich löschen?`, "Löschen", async ()=>{
-    try{ await db.collection("groups").doc(g.id).delete(); goto("groups"); toast("Gruppe gelöscht"); }
+    try{
+      await writeLog(g.id, "gruppe_geloescht", `Gruppe "${g.name}" wurde gelöscht`);
+      await db.collection("groups").doc(g.id).delete(); goto("groups"); toast("Gruppe gelöscht");
+    }
     catch(e){ toast("Fehler: " + e.message); }
   });
 }
@@ -416,8 +434,11 @@ async function clearStatus(g, terminId, personId){
   catch(e){ toast("Fehler: " + e.message); }
 }
 async function setNote(g, terminId, personId, text){
+  const t = getTermin(g, terminId);
+  const p = (g.personen||[]).find(x=>x.id===personId);
   const termine = (g.termine||[]).map(t => t.id===terminId ? {...t, notizen:{...t.notizen,[personId]:text}} : t);
-  try{ await db.collection("groups").doc(g.id).update({ termine }); }
+  try{ await db.collection("groups").doc(g.id).update({ termine });
+    writeLog(g.id, "notiz_gesetzt", `Notiz für ${p?.name||"?"} bei "${t?.bezeichnung||"?"}" aktualisiert`); }
   catch(e){ toast("Fehler: " + e.message); }
 }
 function saveNoteField(terminId, personId){
@@ -986,9 +1007,11 @@ function renderGroup(g){
 function renderLogs(){
   if(!currentLogs.length) return `<div class="empty">Noch keine Einträge im Verlauf.</div>`;
   const actionLabels = {
+    gruppe_erstellt: "🏠 Gruppe erstellt", gruppe_geloescht: "🗑 Gruppe gelöscht",
     person_hinzugefuegt: "➕ Person hinzugefügt", person_bearbeitet: "✎ Person bearbeitet", person_entfernt: "🗑 Person entfernt",
     termin_erstellt: "📅 Termin erstellt", termin_geloescht: "🗑 Termin gelöscht",
     status_gesetzt: "✅ Status gesetzt", status_zurueckgesetzt: "↺ Status zurückgesetzt",
+    notiz_gesetzt: "📝 Notiz aktualisiert",
     mitarbeiter_eingeladen: "✉️ Mitarbeiter eingeladen", mitarbeiter_beigetreten: "🎉 Mitarbeiter beigetreten",
     mitarbeiter_entfernt: "🚪 Mitarbeiter entfernt", mitarbeiter_bearbeitet: "✎ Mitarbeiter bearbeitet"
   };
