@@ -6,7 +6,7 @@ let currentUser = null;
 let currentUserData = null;
 let groupsOwner = [], groupsMember = [];
 let unsubOwner=null, unsubMember=null, unsubGroup=null, unsubLogs=null;
-let heartbeatTimer=null, countdownTimer=null, renderDebounceTimer=null;
+let countdownTimer=null, renderDebounceTimer=null;
 let currentGroup = null;
 let iHoldLock = false;
 let autoRefreshEnabled = true;
@@ -82,7 +82,6 @@ function cleanupListeners(){
   if(unsubMember) unsubMember();
   if(unsubGroup) unsubGroup();
   if(unsubLogs) unsubLogs();
-  if(heartbeatTimer) clearInterval(heartbeatTimer);
   if(countdownTimer) clearInterval(countdownTimer);
   clearTimeout(renderDebounceTimer);
 }
@@ -189,7 +188,7 @@ function filteredGroups(){
 }
 
 // ---------- Gruppe öffnen / schließen + Live-Sperre ----------
-async function openGroup(groupId){ goto("group", { groupId, tab: "termine" }); }
+async function openGroup(groupId){ goto("group", { groupId, tab: "termine" }); tryAcquireLock(groupId); }
 
 function subscribeGroup(groupId){
   if(unsubGroup) unsubGroup();
@@ -202,56 +201,47 @@ function subscribeGroup(groupId){
       accessDeniedGroup = { id: groupId, accessWindows: currentGroup.accessWindows };
       currentGroup = null;
       if(unsubGroup){ unsubGroup(); unsubGroup = null; }
-      if(heartbeatTimer) clearInterval(heartbeatTimer);
       scheduleRender();
       return;
     }
     accessDeniedGroup = null;
-    await tryAcquireLock(groupId);
     scheduleRender();
   }, err => toast("Fehler: " + err.message));
 }
 let lockFailCount = 0;
 const LOCK_MAX_FAILS = 3;
-const HEARTBEAT_INTERVAL = 30000;
-const LOCK_STALE_MS = 65000;
+const LOCK_STALE_MS = 300000;
 
+let lockInFlight = false;
 async function tryAcquireLock(groupId){
+  if(lockInFlight) return;
+  if(lockFailCount >= LOCK_MAX_FAILS) return;
+  lockInFlight = true;
   const ref = db.collection("groups").doc(groupId);
   try{
-    await db.runTransaction(async t => {
-      const doc = await t.get(ref);
-      const data = doc.data();
-      const lock = data.editLock;
-      const stale = !lock || !lock.ts || (nowMs() - lock.ts) > LOCK_STALE_MS;
-      if(!lock || lock.uid === currentUser.uid || stale){
-        t.update(ref, { editLock: { uid: currentUser.uid, name: currentUserData?.name || currentUser.email, ts: nowMs() } });
-        iHoldLock = true;
-        lockFailCount = 0;
-      } else {
-        iHoldLock = false;
-      }
-    });
+    const snap = await ref.get();
+    const data = snap.data();
+    const lock = data.editLock;
+    const stale = !lock || !lock.ts || (nowMs() - lock.ts) > LOCK_STALE_MS;
+    if(!lock || lock.uid === currentUser.uid || stale){
+      await ref.update({ editLock: { uid: currentUser.uid, name: currentUserData?.name || currentUser.email, ts: nowMs() } });
+      iHoldLock = true;
+      lockFailCount = 0;
+    } else {
+      iHoldLock = false;
+      lockFailCount++;
+    }
   }catch(e){
     console.error("Sperre konnte nicht aktualisiert werden:", e);
     iHoldLock = false;
     lockFailCount++;
+  }finally{
+    lockInFlight = false;
   }
-  startHeartbeat(groupId);
 }
-function startHeartbeat(groupId){
-  if(heartbeatTimer) clearInterval(heartbeatTimer);
-  heartbeatTimer = setInterval(async () => {
-    if(!currentGroup || currentGroup.id !== groupId) return;
-    if(iHoldLock){
-      try{ await db.collection("groups").doc(groupId).update({ "editLock.ts": nowMs() }); }
-      catch(e){ console.error(e); }
-    } else {
-      if(lockFailCount >= LOCK_MAX_FAILS) return;
-      await tryAcquireLock(groupId);
-      scheduleRender();
-    }
-  }, HEARTBEAT_INTERVAL);
+async function refreshLock(groupId){
+  if(!iHoldLock) return;
+  try{ await db.collection("groups").doc(groupId).update({ "editLock.ts": nowMs() }); }catch(e){}
 }
 async function releaseLock(){
   if(!iHoldLock || !currentGroup) return;
@@ -265,7 +255,6 @@ function closeGroup(){
   currentGroup = null;
   accessDeniedGroup = null;
   lockFailCount = 0;
-  if(heartbeatTimer) clearInterval(heartbeatTimer);
 }
 function isEditable(){ return currentGroup && iHoldLock; }
 function isOwner(g){ return g && currentUser && g.ownerUid === currentUser.uid; }
