@@ -18,20 +18,24 @@ const admin = require("firebase-admin");
 admin.initializeApp();
 
 exports.cleanupOldLogs = functions.pubsub.schedule("every 24 hours").onRun(async () => {
-  const cutoff = admin.firestore.Timestamp.fromMillis(Date.now() - 30 * 24 * 60 * 60 * 1000);
+  const cutoff = admin.firestore.Timestamp.fromMillis(Date.now() - 365 * 24 * 60 * 60 * 1000);
   const db = admin.firestore();
   const groupsSnap = await db.collection("groups").get();
 
   let totalDeleted = 0;
   for (const groupDoc of groupsSnap.docs) {
-    const logsSnap = await groupDoc.ref.collection("logs").where("ts", "<", cutoff).get();
-    if (logsSnap.empty) continue;
-    const batch = db.batch();
-    logsSnap.docs.forEach(d => batch.delete(d.ref));
-    await batch.commit();
-    totalDeleted += logsSnap.size;
+    let hasMore = true;
+    while (hasMore) {
+      const logsSnap = await groupDoc.ref.collection("logs").where("ts", "<", cutoff).limit(500).get();
+      if (logsSnap.empty) { hasMore = false; break; }
+      const batch = db.batch();
+      logsSnap.docs.forEach(d => batch.delete(d.ref));
+      await batch.commit();
+      totalDeleted += logsSnap.size;
+      if (logsSnap.size < 500) hasMore = false;
+    }
   }
 
-  console.log(`Log-Bereinigung abgeschlossen: ${totalDeleted} alte Einträge gelöscht.`);
+  console.log(`Log-Bereinigung abgeschlossen: ${totalDeleted} alte Einträge (>12 Monate) gelöscht.`);
   return null;
 });
