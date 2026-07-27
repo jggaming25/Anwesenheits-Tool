@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Anwesenheits Check</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#2E7DF7">
+<link rel="icon" href="favicon.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="topbar">
+  <span class="back" id="backBtn" style="visibility:hidden">‹</span>
+  <h1 id="pageTitle">Anwesenheits Check</h1>
+  <span class="icon-btn" id="saveBtn" title="Jetzt speichern">💾</span>
+  <span class="icon-btn" id="exportBtn" style="visibility:hidden">⬇</span>
+  <span class="icon-btn" id="accountBtn" title="Mein Konto">👤</span>
+  <button id="logoutBtn" title="Abmelden">✕</button>
+</div>
+<div class="container" id="app">
+  <div class="empty">Lade Daten…</div>
+</div>
+<div class="app-footer">
+  <a href="impressum.html">Impressum</a> · <a href="datenschutz.html">Datenschutz</a>
+</div>
+<button class="fab" id="fabBtn">+</button>
+
+<div class="refresh-widget" id="refreshWidget">
+  <span id="refreshCountdown">60 s</span>
+  <label class="mini-toggle">
+    <input type="checkbox" id="refreshToggle" checked>
+    <span></span>
+  </label>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="firebase-config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+<script src="emailjs-config.js"></script>
+<script src="app.js"></script>
+<script>
+if("serviceWorker" in navigator){
+  window.addEventListener("load", ()=> navigator.serviceWorker.register("service-worker.js").catch(()=>{}));
+}
+</script>
+</body>
+</html>
