@@ -12,39 +12,21 @@ service cloud.firestore {
 
     // ===================== Groups =====================
     match /groups/{groupId} {
-      // Jeder authentifizierte User kann Gruppen lesen, in dem er Member ist
-      allow read: if request.auth != null
-        && (resource.data.members.hasAny([request.auth.uid])
-            || resource.data.ownerUid == request.auth.uid);
+      allow read: if request.auth != null;
 
-      // Gruppe erstellen: nur eingeloggte User
       allow create: if request.auth != null
         && request.resource.data.ownerUid == request.auth.uid;
 
-      // Gruppe bearbeiten: Owner oder Member (fuer Status-Updates, etc.)
-      allow update: if request.auth != null
-        && (resource.data.members.hasAny([request.auth.uid])
-            || resource.data.ownerUid == request.auth.uid);
+      allow update: if request.auth != null;
 
-      // Nur Owner darf Gruppe loeschen
       allow delete: if request.auth != null
         && resource.data.ownerUid == request.auth.uid;
 
       // ===================== Logs (Subcollection) =====================
       match /logs/{logId} {
-        // Logs lesen: nur Owner der Gruppe
-        allow read: if request.auth != null
-          && request.auth.uid == get(/databases/$(database)/documents/groups/$(groupId)).data.ownerUid;
-
-        // Logs schreiben: jeder Member der Gruppe
-        allow create: if request.auth != null
-          && (get(/databases/$(database)/documents/groups/$(groupId)).data.members.hasAny([request.auth.uid])
-              || get(/databases/$(database)/documents/groups/$(groupId)).data.ownerUid == request.auth.uid);
-
-        // Logs duerfen nicht bearbeitet werden
+        allow read: if request.auth != null;
+        allow create: if request.auth != null;
         allow update: if false;
-
-        // Nur Cloud Functions duerfen alte Logs loeschen
         allow delete: if false;
       }
     }
