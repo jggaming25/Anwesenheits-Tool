@@ -194,13 +194,28 @@ async function openGroup(groupId){ goto("group", { groupId, tab: "termine" }); }
 function subscribeGroup(groupId){
   if(unsubGroup) unsubGroup();
   currentGroup = null;
+  accessDeniedGroup = null;
   unsubGroup = db.collection("groups").doc(groupId).onSnapshot(async doc => {
     if(!doc.exists){ currentGroup = null; goto("groups"); return; }
     currentGroup = { id: doc.id, ...doc.data() };
+    if(!isAccessAllowed(currentGroup)){
+      accessDeniedGroup = { id: groupId, accessWindows: currentGroup.accessWindows };
+      currentGroup = null;
+      if(unsubGroup){ unsubGroup(); unsubGroup = null; }
+      if(heartbeatTimer) clearInterval(heartbeatTimer);
+      scheduleRender();
+      return;
+    }
+    accessDeniedGroup = null;
     await tryAcquireLock(groupId);
     scheduleRender();
   }, err => toast("Fehler: " + err.message));
 }
+let lockFailCount = 0;
+const LOCK_MAX_FAILS = 3;
+const HEARTBEAT_INTERVAL = 30000;
+const LOCK_STALE_MS = 65000;
+
 async function tryAcquireLock(groupId){
   const ref = db.collection("groups").doc(groupId);
   try{
@@ -208,10 +223,11 @@ async function tryAcquireLock(groupId){
       const doc = await t.get(ref);
       const data = doc.data();
       const lock = data.editLock;
-      const stale = !lock || !lock.ts || (nowMs() - lock.ts) > 25000;
+      const stale = !lock || !lock.ts || (nowMs() - lock.ts) > LOCK_STALE_MS;
       if(!lock || lock.uid === currentUser.uid || stale){
         t.update(ref, { editLock: { uid: currentUser.uid, name: currentUserData?.name || currentUser.email, ts: nowMs() } });
         iHoldLock = true;
+        lockFailCount = 0;
       } else {
         iHoldLock = false;
       }
@@ -219,6 +235,7 @@ async function tryAcquireLock(groupId){
   }catch(e){
     console.error("Sperre konnte nicht aktualisiert werden:", e);
     iHoldLock = false;
+    lockFailCount++;
   }
   startHeartbeat(groupId);
 }
@@ -230,11 +247,11 @@ function startHeartbeat(groupId){
       try{ await db.collection("groups").doc(groupId).update({ "editLock.ts": nowMs() }); }
       catch(e){ console.error(e); }
     } else {
-      // Sperre evtl. inzwischen frei geworden oder abgelaufen -> automatisch neu versuchen
+      if(lockFailCount >= LOCK_MAX_FAILS) return;
       await tryAcquireLock(groupId);
       scheduleRender();
     }
-  }, 8000);
+  }, HEARTBEAT_INTERVAL);
 }
 async function releaseLock(){
   if(!iHoldLock || !currentGroup) return;
@@ -246,10 +263,90 @@ function closeGroup(){
   if(unsubGroup) unsubGroup(); unsubGroup = null;
   if(unsubLogs) unsubLogs(); unsubLogs = null;
   currentGroup = null;
+  accessDeniedGroup = null;
+  lockFailCount = 0;
   if(heartbeatTimer) clearInterval(heartbeatTimer);
 }
 function isEditable(){ return currentGroup && iHoldLock; }
 function isOwner(g){ return g && currentUser && g.ownerUid === currentUser.uid; }
+
+// ---------- Zugriffsfenster ----------
+const DAY_NAMES = ["So","Mo","Di","Mi","Do","Fr","Sa"];
+
+function getBerlinNow(){
+  const now = new Date();
+  const berlinStr = now.toLocaleString("en-US",{timeZone:"Europe/Berlin"});
+  return new Date(berlinStr);
+}
+
+function isAccessAllowed(g){
+  if(isOwner(g)) return true;
+  const aw = g.accessWindows;
+  if(!aw || !aw.length) return true;
+  const activeWindows = aw.filter(w => w && w.active);
+  if(!activeWindows.length) return true;
+
+  const berlin = getBerlinNow();
+  const currentDay = berlin.getDay();
+  const curMinutes = berlin.getHours() * 60 + berlin.getMinutes();
+
+  for(const w of activeWindows){
+    if(!w.days || !w.days.includes(currentDay)) continue;
+    const [sh, sm] = (w.start||"0:0").split(":").map(Number);
+    const [eh, em] = (w.end||"0:0").split(":").map(Number);
+    const startMin = sh * 60 + sm;
+    const endMin = eh * 60 + em;
+    if(startMin <= endMin){
+      if(curMinutes >= startMin && curMinutes < endMin) return true;
+    } else {
+      if(curMinutes >= startMin || curMinutes < endMin) return true;
+    }
+  }
+  return false;
+}
+
+function getNextAccessWindow(g){
+  const aw = g.accessWindows;
+  if(!aw || !aw.length) return null;
+  const activeWindows = aw.filter(w => w && w.active);
+  if(!activeWindows.length) return null;
+
+  const berlin = getBerlinNow();
+  const currentDay = berlin.getDay();
+  const curMinutes = berlin.getHours() * 60 + berlin.getMinutes();
+
+  let best = null;
+  for(const w of activeWindows){
+    if(!w.days || !w.days.length) continue;
+    const [sh, sm] = (w.start||"0:0").split(":").map(Number);
+    const startMin = sh * 60 + sm;
+
+    for(let d = 0; d < 7; d++){
+      const checkDay = (currentDay + d) % 7;
+      if(!w.days.includes(checkDay)) continue;
+      let diffMin = 0;
+      if(d === 0){
+        if(startMin > curMinutes) diffMin = startMin - curMinutes;
+        else continue;
+      } else {
+        diffMin = (d * 1440) + startMin - curMinutes;
+      }
+      if(!best || diffMin < best.diff){
+        best = { diff: diffMin, day: checkDay, start: w.start };
+      }
+      break;
+    }
+  }
+  if(!best) return null;
+  const hours = Math.floor(best.diff / 60);
+  const mins = best.diff % 60;
+  let label = "";
+  if(hours > 0) label += hours + " Std ";
+  if(mins > 0) label += mins + " Min";
+  return `Nächster Zugriff: ${DAY_NAMES[best.day]} um ${best.start} Uhr (in ${label.trim()})`;
+}
+
+let accessDeniedGroup = null;
 
 // ---------- Navigation ----------
 function goto(view, extra={}){
@@ -258,8 +355,11 @@ function goto(view, extra={}){
   }
   if(nav.view==="group" && view!=="group" && view!=="termin") closeGroup();
   nav = { view, groupId: nav.groupId, tab: nav.tab, terminId: nav.terminId, ...extra };
-  if(view==="group" && (!currentGroup || currentGroup.id!==nav.groupId)) subscribeGroup(nav.groupId);
-  if(view==="group" && nav.tab==="logs") subscribeLogs(nav.groupId);
+  if(view==="group" && (!currentGroup || currentGroup.id!==nav.groupId)){
+    accessDeniedGroup = null;
+    subscribeGroup(nav.groupId);
+  }
+  if(view==="group" && nav.tab==="logs" && !accessDeniedGroup) subscribeLogs(nav.groupId);
   else if(unsubLogs){ unsubLogs(); unsubLogs=null; }
   render();
 }
@@ -284,7 +384,7 @@ function subscribeLogs(groupId){
   currentLogs = [];
   maybeCleanupOldLogs(groupId);
   unsubLogs = db.collection("groups").doc(groupId).collection("logs")
-    .orderBy("ts","desc")
+    .orderBy("ts","desc").limit(200)
     .onSnapshot(snap => { currentLogs = snap.docs.map(d=>({id:d.id, ...d.data()})); scheduleRender(); },
       err => toast("Fehler beim Laden der Logs: " + err.message));
 }
@@ -345,6 +445,7 @@ async function addGroup(name){
       members: [currentUser.uid],
       memberInfo: { [currentUser.uid]: { email: currentUser.email, name: currentUserData?.name || currentUser.email, addedAt: nowMs(), role: "owner" } },
       pendingInvites: {}, personen: [], termine: [], editLock: null,
+      accessWindows: [null, null, null],
       createdAt: firebase.firestore.FieldValue.serverTimestamp()
     });
     await writeLog(ref.id, "gruppe_erstellt", `Gruppe "${name}" wurde erstellt`);
@@ -793,6 +894,80 @@ function submitEditMitarbeiter(memberUid){
   closeModal();
 }
 
+// ---------- Zugriffszeiten ----------
+function awRowHtml(idx, w){
+  const days = [0,1,2,3,4,5,6];
+  const dayCheckboxes = days.map(d =>
+    `<label class="aw-day"><input type="checkbox" class="aw-day-cb" data-idx="${idx}" value="${d}" ${(w&&w.days&&w.days.includes(d))?"checked":""}>${DAY_NAMES[d]}</label>`
+  ).join("");
+  return `
+    <div class="aw-row">
+      <div class="aw-row-header">
+        <span class="aw-row-num">Zeitraum ${idx+1}</span>
+        <label class="mini-toggle" style="width:36px;height:20px;">
+          <input type="checkbox" class="aw-active-cb" data-idx="${idx}" ${w&&w.active?"checked":""}>
+          <span></span>
+        </label>
+      </div>
+      <div class="aw-row-body">
+        <div class="field-row">
+          <div style="flex:1"><div class="field-label">Von</div><input type="time" class="aw-start" data-idx="${idx}" value="${w?w.start:""}"></div>
+          <div style="flex:1"><div class="field-label">Bis</div><input type="time" class="aw-end" data-idx="${idx}" value="${w?w.end:""}"></div>
+        </div>
+        <div class="field-label">Gilt an</div>
+        <div class="aw-days">${dayCheckboxes}</div>
+      </div>
+    </div>`;
+}
+
+function modalAccessWindows(){
+  const aw = currentGroup.accessWindows || [null,null,null];
+  while(aw.length < 3) aw.push(null);
+  const rows = [0,1,2].map(i => awRowHtml(i, aw[i])).join("");
+  showModal(`<h3>Zugriffszeiten</h3>
+    <p style="color:var(--muted);font-size:13px;margin-top:-8px;">Außerhalb dieser Zeiten können Mitarbeiter die Gruppe nicht einsehen oder bearbeiten. Der Ersteller hat immer Zugriff.</p>
+    <div class="aw-list">${rows}</div>
+    <div class="modal-btns">
+      <button class="btn btn-secondary" onclick="closeModal()">Abbrechen</button>
+      <button class="btn btn-primary" onclick="submitAccessWindows()">Speichern</button>
+    </div>`);
+}
+
+function readAccessWindowsFromModal(){
+  const aw = [null,null,null];
+  for(let i=0;i<3;i++){
+    const active = document.querySelector(`.aw-active-cb[data-idx="${i}"]`)?.checked || false;
+    const start = document.querySelector(`.aw-start[data-idx="${i}"]`)?.value || "";
+    const end = document.querySelector(`.aw-end[data-idx="${i}"]`)?.value || "";
+    const dayCbs = document.querySelectorAll(`.aw-day-cb[data-idx="${i}"]:checked`);
+    const days = [...dayCbs].map(cb => parseInt(cb.value));
+    if(active || start || end || days.length){
+      aw[i] = { active, start, end, days };
+    }
+  }
+  return aw;
+}
+
+async function submitAccessWindows(){
+  const aw = readAccessWindowsFromModal();
+  try{
+    await db.collection("groups").doc(currentGroup.id).update({ accessWindows: aw });
+    writeLog(currentGroup.id, "zugriffszeiten_gesetzt", "Zugriffszeiten wurden aktualisiert");
+    toast("Zugriffszeiten gespeichert");
+    closeModal();
+  }catch(e){ toast("Fehler: " + e.message); }
+}
+
+async function toggleAccessWindows(enabled){
+  const aw = currentGroup.accessWindows || [null,null,null];
+  while(aw.length < 3) aw.push(null);
+  const updated = aw.map(w => w ? {...w, active: enabled} : null);
+  try{
+    await db.collection("groups").doc(currentGroup.id).update({ accessWindows: updated });
+    writeLog(currentGroup.id, enabled?"zugriffszeiten_aktiviert":"zugriffszeiten_deaktiviert", enabled?"Zugriffszeiten aktiviert":"Zugriffszeiten deaktiviert");
+  }catch(e){ toast("Fehler: " + e.message); }
+}
+
 // ---------- Rendering ----------
 function render(){
   // Sicherstellen, dass ein unbestätigtes Konto sofort die Verifizierung sieht –
@@ -844,7 +1019,14 @@ function render(){
   if(nav.view==="konto"){ renderKonto(); return; }
 
   const g = currentGroup;
-  if((nav.view==="group" || nav.view==="termin") && !g){ app.innerHTML = `<div class="empty">Lade Gruppe…</div>`; return; }
+  if((nav.view==="group" || nav.view==="termin") && !g){
+    if(accessDeniedGroup){
+      renderAccessDenied(accessDeniedGroup);
+    } else {
+      app.innerHTML = `<div class="empty">Lade Gruppe…</div>`;
+    }
+    return;
+  }
 
   if(nav.view==="group"){ renderGroup(g); return; }
   if(nav.view==="termin"){ renderTermin(g); return; }
@@ -914,6 +1096,26 @@ function renderKonto(){
   document.getElementById("settingsDarkMode").addEventListener("change", e=> toggleDarkMode(e.target.checked));
 }
 
+function renderAccessDenied(info){
+  const title = document.getElementById("pageTitle"); title.textContent = "Zugriff eingeschränkt";
+  document.getElementById("fabBtn").style.display = "none";
+  document.getElementById("exportBtn").style.visibility = "hidden";
+  const app = document.getElementById("app");
+
+  const nextInfo = getNextAccessWindow({ accessWindows: info.accessWindows || [] });
+
+  app.innerHTML = `
+    <div class="access-denied-card">
+      <div class="access-denied-icon">🔒</div>
+      <h3>Zugriff nicht erlaubt</h3>
+      <p>Du kannst diese Gruppe nur in den vom Ersteller festgelegten Zeiträumen bearbeiten und einsehen.</p>
+      <p class="access-denied-hint">Wende dich an den Gruppenersteller, wenn du die Zeiträume ändern möchtest.</p>
+      <div class="access-denied-next">
+        ${nextInfo ? escapeHtml(nextInfo) : "Keine weiteren Zugriffszeiten konfiguriert."}
+      </div>
+    </div>`;
+}
+
 function renderGroup(g){
   const title = document.getElementById("pageTitle"); title.textContent = g.name;
   const exportBtn = document.getElementById("exportBtn"); exportBtn.style.visibility = "visible"; exportBtn.onclick = ()=>exportCSV(g);
@@ -923,7 +1125,7 @@ function renderGroup(g){
   fab.style.display = (nav.tab==="statistik" || nav.tab==="logs" || (!editable && nav.tab!=="mitarbeiter") || (nav.tab==="mitarbeiter" && !owner)) ? "none" : "block";
 
   let lockBanner = "";
-  if(g.editLock && g.editLock.uid !== currentUser.uid && (nowMs()-g.editLock.ts) < 25000){
+  if(g.editLock && g.editLock.uid !== currentUser.uid && (nowMs()-g.editLock.ts) < LOCK_STALE_MS){
     lockBanner = `<div class="lock-banner">🔒 Diese Gruppe wird gerade von <b>${escapeHtml(g.editLock.name)}</b> bearbeitet. Du kannst zusehen, aber nicht gleichzeitig eintragen.</div>`;
   } else if(editable){
     lockBanner = `<div class="lock-banner mine">✏️ Du bearbeitest diese Gruppe gerade live.</div>`;
@@ -969,6 +1171,29 @@ function renderGroup(g){
         </div>`).join("");
     if(!members.length && !pending.length) body = `<div class="empty">Noch keine Mitarbeiter.</div>`;
     if(!owner) body = `<div class="empty" style="padding-bottom:6px;">Nur der Ersteller kann Mitarbeiter verwalten.</div>` + body;
+    if(owner){
+      const aw = g.accessWindows || [];
+      const awEnabled = aw.some(w => w && w.active);
+      let awPreview = "";
+      for(let i=0;i<3;i++){
+        const w = aw[i];
+        if(w && w.active){
+          const dayLabels = (w.days||[]).map(d => DAY_NAMES[d]).join(", ");
+          awPreview += `<div class="aw-preview-row"><span class="aw-preview-time">${w.start||"–"} – ${w.end||"–"}</span><span class="aw-preview-days">${dayLabels || "Keine Tage"}</span></div>`;
+        }
+      }
+      body += `
+        <div class="account-card" style="margin-top:14px;">
+          <h3>Zugriffszeiten</h3>
+          <p>Lege fest, zu welchen Zeiten Mitarbeiter diese Gruppe sehen und bearbeiten können.</p>
+          <div class="settings-row">
+            <span>Zugriffszeiten aktiv</span>
+            <label class="mini-toggle"><input type="checkbox" id="awToggle" ${awEnabled?"checked":""} onchange="toggleAccessWindows(this.checked)"><span></span></label>
+          </div>
+          <div id="awPreview">${awPreview || '<div style="color:var(--muted);font-size:13px;">Keine Zeiträume konfiguriert.</div>'}</div>
+          <button class="btn btn-secondary" style="width:100%;margin-top:10px;" onclick="modalAccessWindows()">Zeiträume bearbeiten</button>
+        </div>`;
+    }
   } else if(nav.tab==="statistik"){
     body = renderStatistik(g);
   } else if(nav.tab==="logs"){
@@ -1012,6 +1237,9 @@ function renderLogs(){
     termin_erstellt: "📅 Termin erstellt", termin_geloescht: "🗑 Termin gelöscht",
     status_gesetzt: "✅ Status gesetzt", status_zurueckgesetzt: "↺ Status zurückgesetzt",
     notiz_gesetzt: "📝 Notiz aktualisiert",
+    zugriffszeiten_gesetzt: "⏰ Zugriffszeiten geändert",
+    zugriffszeiten_aktiviert: "⏰ Zugriffszeiten aktiviert",
+    zugriffszeiten_deaktiviert: "⏰ Zugriffszeiten deaktiviert",
     mitarbeiter_eingeladen: "✉️ Mitarbeiter eingeladen", mitarbeiter_beigetreten: "🎉 Mitarbeiter beigetreten",
     mitarbeiter_entfernt: "🚪 Mitarbeiter entfernt", mitarbeiter_bearbeitet: "✎ Mitarbeiter bearbeitet"
   };
@@ -1033,7 +1261,7 @@ function renderTermin(g){
   const editable = isEditable();
 
   let lockBanner = "";
-  if(g.editLock && g.editLock.uid !== currentUser.uid && (nowMs()-g.editLock.ts) < 25000){
+  if(g.editLock && g.editLock.uid !== currentUser.uid && (nowMs()-g.editLock.ts) < LOCK_STALE_MS){
     lockBanner = `<div class="lock-banner">🔒 Wird gerade von <b>${escapeHtml(g.editLock.name)}</b> bearbeitet – nur Ansicht möglich.</div>`;
   }
 
