@@ -6,7 +6,7 @@ let currentUser = null;
 let currentUserData = null;
 let groupsOwner = [], groupsMember = [];
 let unsubOwner=null, unsubMember=null, unsubGroup=null, unsubLogs=null;
-let heartbeatTimer=null, countdownTimer=null, renderDebounceTimer=null;
+let countdownTimer=null, renderDebounceTimer=null;
 let currentGroup = null;
 let iHoldLock = false;
 let autoRefreshEnabled = true;
@@ -82,7 +82,6 @@ function cleanupListeners(){
   if(unsubMember) unsubMember();
   if(unsubGroup) unsubGroup();
   if(unsubLogs) unsubLogs();
-  if(heartbeatTimer) clearInterval(heartbeatTimer);
   if(countdownTimer) clearInterval(countdownTimer);
   clearTimeout(renderDebounceTimer);
 }
@@ -202,7 +201,6 @@ function subscribeGroup(groupId){
       accessDeniedGroup = { id: groupId, accessWindows: currentGroup.accessWindows };
       currentGroup = null;
       if(unsubGroup){ unsubGroup(); unsubGroup = null; }
-      if(heartbeatTimer) clearInterval(heartbeatTimer);
       scheduleRender();
       return;
     }
@@ -212,12 +210,12 @@ function subscribeGroup(groupId){
 }
 let lockFailCount = 0;
 const LOCK_MAX_FAILS = 3;
-const HEARTBEAT_INTERVAL = 30000;
-const LOCK_STALE_MS = 65000;
+const LOCK_STALE_MS = 300000;
 
 let lockInFlight = false;
 async function tryAcquireLock(groupId){
   if(lockInFlight) return;
+  if(lockFailCount >= LOCK_MAX_FAILS) return;
   lockInFlight = true;
   const ref = db.collection("groups").doc(groupId);
   try{
@@ -240,21 +238,10 @@ async function tryAcquireLock(groupId){
   }finally{
     lockInFlight = false;
   }
-  startHeartbeat(groupId);
 }
-function startHeartbeat(groupId){
-  if(heartbeatTimer) clearInterval(heartbeatTimer);
-  heartbeatTimer = setInterval(async () => {
-    if(!currentGroup || currentGroup.id !== groupId) return;
-    if(iHoldLock){
-      try{ await db.collection("groups").doc(groupId).update({ "editLock.ts": nowMs() }); }
-      catch(e){ console.error(e); }
-    } else {
-      if(lockFailCount >= LOCK_MAX_FAILS) return;
-      await tryAcquireLock(groupId);
-      scheduleRender();
-    }
-  }, HEARTBEAT_INTERVAL);
+async function refreshLock(groupId){
+  if(!iHoldLock) return;
+  try{ await db.collection("groups").doc(groupId).update({ "editLock.ts": nowMs() }); }catch(e){}
 }
 async function releaseLock(){
   if(!iHoldLock || !currentGroup) return;
@@ -268,7 +255,6 @@ function closeGroup(){
   currentGroup = null;
   accessDeniedGroup = null;
   lockFailCount = 0;
-  if(heartbeatTimer) clearInterval(heartbeatTimer);
 }
 function isEditable(){ return currentGroup && iHoldLock; }
 function isOwner(g){ return g && currentUser && g.ownerUid === currentUser.uid; }
