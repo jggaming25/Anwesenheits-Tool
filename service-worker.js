@@ -1,4 +1,4 @@
-const CACHE_NAME = "anwesenheits-check-v1";
+const CACHE_NAME = "anwesenheits-check-v2";
 const APP_SHELL = ["index.html", "style.css", "manifest.json", "icons/icon-192.png", "icons/icon-512.png"];
 
 self.addEventListener("install", event => {
